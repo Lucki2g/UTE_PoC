@@ -10,7 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fluentui/react": "^8.125.4",
     "@microsoft/power-apps": "^1.0.3",
+    "eslint-plugin-react": "^7.37.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

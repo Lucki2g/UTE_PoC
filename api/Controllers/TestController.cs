@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using TestEngine.Models.Requests;
 using TestEngine.Services;
 
@@ -94,7 +95,7 @@ public static class TestController
         }
     }
 
-    private static async Task<IResult> DeleteTest(DeleteTestRequest request, ITestService testService)
+    private static async Task<IResult> DeleteTest([FromBody] DeleteTestRequest request, ITestService testService)
     {
         try
         {

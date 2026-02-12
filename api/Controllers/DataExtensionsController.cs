@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Mvc;
 using TestEngine.Models.Requests;
 using TestEngine.Services;
 
@@ -86,7 +87,7 @@ public static class DataExtensionsController
         }
     }
 
-    private static async Task<IResult> DeleteExtension(DeleteExtensionRequest request, IDataExtensionsService dataExtensionsService)
+    private static async Task<IResult> DeleteExtension([FromBody] DeleteExtensionRequest request, IDataExtensionsService dataExtensionsService)
     {
         try
         {

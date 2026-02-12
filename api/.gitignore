@@ -115,3 +115,6 @@ appsettings.Local.json
 
 # User secrets
 secrets.json
+
+# Cloned consumer repository
+data/

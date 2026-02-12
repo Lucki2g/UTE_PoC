@@ -8,12 +8,9 @@ public class DataExtensionsService : IDataExtensionsService
     private readonly string _dataExtensionsPath;
     private readonly IFileManagerService _fileManager;
 
-    public DataExtensionsService(IConfiguration configuration, IFileManagerService fileManager)
+    public DataExtensionsService(TestProjectPaths paths, IFileManagerService fileManager)
     {
-        var repositoryPath = configuration["TestProject:RepositoryPath"]
-            ?? throw new InvalidOperationException("TestProject:RepositoryPath not configured");
-        var dataExtensionsRelativePath = configuration["TestProject:DataExtensionsPath"] ?? "Tests\\DataExtensions";
-        _dataExtensionsPath = Path.Combine(repositoryPath, dataExtensionsRelativePath);
+        _dataExtensionsPath = paths.DataExtensionsPath;
         _fileManager = fileManager;
     }
 

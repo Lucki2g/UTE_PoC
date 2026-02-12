@@ -6,10 +6,9 @@ public class MetadataService : IMetadataService
 {
     private readonly string _repositoryPath;
 
-    public MetadataService(IConfiguration configuration)
+    public MetadataService(TestProjectPaths paths)
     {
-        _repositoryPath = configuration["TestProject:RepositoryPath"]
-            ?? throw new InvalidOperationException("TestProject:RepositoryPath not configured");
+        _repositoryPath = paths.RepositoryPath;
     }
 
     public async Task SyncMetadataAsync(string? environmentUrl = null)

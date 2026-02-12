@@ -1,5 +1,6 @@
 using CliWrap;
 using CliWrap.Buffered;
+using TestEngine.Models.Responses;
 
 namespace TestEngine.Services;
 
@@ -12,10 +13,9 @@ public class GitService : IGitService
     private readonly string? _githubOwner;
     private readonly string? _githubRepository;
 
-    public GitService(IConfiguration configuration)
+    public GitService(TestProjectPaths paths, IConfiguration configuration)
     {
-        _repositoryPath = configuration["TestProject:RepositoryPath"]
-            ?? throw new InvalidOperationException("TestProject:RepositoryPath not configured");
+        _repositoryPath = paths.RepositoryPath;
         _mainBranch = configuration["Git:MainBranch"] ?? "main";
         _remoteName = configuration["Git:RemoteName"] ?? "origin";
         _githubToken = configuration["GitHub:Token"];
@@ -23,8 +23,84 @@ public class GitService : IGitService
         _githubRepository = configuration["GitHub:Repository"];
     }
 
+    public async Task<CloneResult> CloneRepositoryAsync(string repositoryUrl)
+    {
+        ValidateRepositoryUrl(repositoryUrl);
+
+        var gitDir = Path.Combine(_repositoryPath, ".git");
+        if (Directory.Exists(gitDir))
+        {
+            throw new InvalidOperationException("Repository is already cloned at the configured path");
+        }
+
+        // Ensure parent directory exists
+        var parentDir = Path.GetDirectoryName(_repositoryPath);
+        if (parentDir != null)
+        {
+            Directory.CreateDirectory(parentDir);
+        }
+
+        // Inject token into URL for authentication if configured
+        var cloneUrl = repositoryUrl;
+        var tokenUsed = false;
+        if (!string.IsNullOrWhiteSpace(_githubToken))
+        {
+            cloneUrl = InjectTokenIntoUrl(repositoryUrl, _githubToken);
+            tokenUsed = true;
+        }
+
+        // Clone the repository
+        await Cli.Wrap("git")
+            .WithArguments(["clone", cloneUrl, _repositoryPath])
+            .ExecuteAsync();
+
+        // Reset remote URL to token-free version so credentials aren't persisted
+        if (tokenUsed)
+        {
+            await ExecuteGitAsync("remote", "set-url", _remoteName, repositoryUrl);
+        }
+
+        var branch = await GetCurrentBranchAsync();
+
+        return new CloneResult
+        {
+            Message = "Repository cloned successfully",
+            Branch = branch,
+            Path = _repositoryPath
+        };
+    }
+
+    public async Task<RepositoryStatus> GetStatusAsync()
+    {
+        var gitDir = Path.Combine(_repositoryPath, ".git");
+        if (!Directory.Exists(gitDir))
+        {
+            return new RepositoryStatus
+            {
+                Cloned = false,
+                Path = _repositoryPath
+            };
+        }
+
+        var branch = await GetCurrentBranchAsync();
+        var statusOutput = await ExecuteGitBufferedAsync("status", "--porcelain");
+        var changedLines = statusOutput
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        return new RepositoryStatus
+        {
+            Cloned = true,
+            Branch = branch,
+            Clean = changedLines.Length == 0,
+            ChangedFiles = changedLines.Length,
+            Path = _repositoryPath
+        };
+    }
+
     public async Task<string> GetCurrentBranchAsync()
     {
+        EnsureRepositoryExists();
+
         var result = await Cli.Wrap("git")
             .WithArguments(["rev-parse", "--abbrev-ref", "HEAD"])
             .WithWorkingDirectory(_repositoryPath)
@@ -35,6 +111,7 @@ public class GitService : IGitService
 
     public async Task LoadBranchAsync(string branchName)
     {
+        EnsureRepositoryExists();
         ValidateBranchName(branchName);
 
         // Try to checkout local branch first
@@ -55,6 +132,7 @@ public class GitService : IGitService
 
     public async Task CreateNewBranchAsync(string branchName)
     {
+        EnsureRepositoryExists();
         ValidateBranchName(branchName);
 
         // Check if branch already exists
@@ -73,6 +151,8 @@ public class GitService : IGitService
 
     public async Task SaveChangesAsync(string message)
     {
+        EnsureRepositoryExists();
+
         if (string.IsNullOrWhiteSpace(message))
         {
             throw new ArgumentException("Commit message cannot be empty", nameof(message));
@@ -91,12 +171,15 @@ public class GitService : IGitService
 
     public async Task PublishBranchAsync()
     {
+        EnsureRepositoryExists();
+
         var currentBranch = await GetCurrentBranchAsync();
         await ExecuteGitAsync("push", "-u", _remoteName, currentBranch);
     }
 
     public async Task<string> CreatePullRequestAsync(string targetBranch, string title, string description)
     {
+        EnsureRepositoryExists();
         ValidateBranchName(targetBranch);
 
         if (string.IsNullOrWhiteSpace(_githubToken) ||
@@ -110,6 +193,15 @@ public class GitService : IGitService
 
         // TODO: Implement actual GitHub/Azure DevOps REST API call
         throw new NotImplementedException("Pull request creation via GitHub/Azure DevOps REST API not yet implemented");
+    }
+
+    private void EnsureRepositoryExists()
+    {
+        var gitDir = Path.Combine(_repositoryPath, ".git");
+        if (!Directory.Exists(gitDir))
+        {
+            throw new InvalidOperationException("Repository not initialized. Call POST /git/clone first.");
+        }
     }
 
     private async Task ExecuteGitAsync(params string[] arguments)
@@ -128,6 +220,38 @@ public class GitService : IGitService
             .ExecuteBufferedAsync();
 
         return result.StandardOutput;
+    }
+
+    private static string InjectTokenIntoUrl(string url, string token)
+    {
+        // https://github.com/org/repo.git → https://<token>@github.com/org/repo.git
+        const string prefix = "https://";
+        if (!url.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return url;
+        }
+
+        return $"{prefix}{token}@{url[prefix.Length..]}";
+    }
+
+    private static void ValidateRepositoryUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            throw new ArgumentException("Repository URL cannot be empty", nameof(url));
+        }
+
+        if (!url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("Repository URL must use HTTPS", nameof(url));
+        }
+
+        var allowedHosts = new[] { "github.com", "dev.azure.com" };
+        var uri = new Uri(url);
+        if (!allowedHosts.Any(host => uri.Host.Equals(host, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ArgumentException($"Repository URL must be hosted on: {string.Join(", ", allowedHosts)}", nameof(url));
+        }
     }
 
     private static void ValidateBranchName(string branchName)

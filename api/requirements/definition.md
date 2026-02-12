@@ -40,6 +40,7 @@ TestEngine/
 │   ├── DataProducerController.cs
 │   └── DataExtensionsController.cs
 ├── Services/
+│   ├── TestProjectPaths.cs
 │   ├── GitService.cs
 │   ├── MetadataService.cs
 │   ├── TestService.cs
@@ -50,6 +51,7 @@ TestEngine/
 │   └── FileManagerService.cs
 ├── Models/
 │   ├── Requests/
+│   │   ├── CloneRepositoryRequest.cs
 │   │   ├── LoadBranchRequest.cs
 │   │   ├── SubmitRequest.cs
 │   │   ├── CreateTestRequest.cs
@@ -58,6 +60,8 @@ TestEngine/
 │   │   ├── CreateExtensionRequest.cs
 │   │   └── ...
 │   ├── Responses/
+│   │   ├── CloneResult.cs
+│   │   ├── RepositoryStatus.cs
 │   │   ├── TestRunResult.cs
 │   │   ├── TestMetadata.cs
 │   │   ├── ProducerMetadata.cs
@@ -106,7 +110,7 @@ Standard HTTP error responses using built-in `Results` helpers. No custom error 
 
 ## 4. Git Service — Technical Decision
 
-The Git service manages branching, committing, pushing, and pull request creation against the shared test repository.
+The Git service manages the full Git lifecycle against the shared test repository: initial cloning, branching, committing, pushing, and pull request creation.
 
 ### Option A: Shelling out to Git CLI
 
@@ -143,7 +147,25 @@ A managed .NET binding to libgit2, providing a native C# API for Git operations.
 
 ### Recommendation: **Git CLI via CliWrap**
 
-For this use case, the CLI approach is more practical. The operations needed (fetch, pull, checkout, branch, add, commit, push) are straightforward CLI commands, and the API will already need to call the GitHub/Azure DevOps REST API for pull requests. CliWrap provides a clean, fluent C# wrapper around process execution with proper async support, output piping, and cancellation. Input sanitization is critical — branch names and messages must be validated/escaped.
+For this use case, the CLI approach is more practical. The operations needed (clone, fetch, pull, checkout, branch, add, commit, push) are straightforward CLI commands, and the API will already need to call the GitHub/Azure DevOps REST API for pull requests. CliWrap provides a clean, fluent C# wrapper around process execution with proper async support, output piping, and cancellation. Input sanitization is critical — branch names, repository URLs, and messages must be validated/escaped.
+
+### Repository Bootstrap — Initial Clone
+
+Before any Git operations (branching, committing, etc.) can work, the consumer repository must exist on disk. The repository path is deterministic — `./data/repository` relative to the API's content root — computed by `TestProjectPaths` and shared across all services. The API must perform the initial `git clone` to populate that path.
+
+**Why this is an API operation (not manual setup):**
+- The API may be deployed as a container or hosted service where manual Git setup is impractical.
+- Low-code developers using the Power Platform frontend need a self-service way to initialize their environment — they cannot SSH into the server and run `git clone`.
+- It keeps the entire Git lifecycle within the API's control, making deployment and environment provisioning fully automated.
+
+**Authentication strategy:**
+- HTTPS clones only (no SSH) to avoid key management on the server.
+- If a `GitHub:Token` (PAT or fine-grained token) is configured, it is injected into the clone URL at runtime. After cloning, the remote URL is immediately reset to the token-free URL so the token is not persisted in `.git/config`.
+- For subsequent authenticated operations (push, fetch), Git credential helpers or the token can be provided via environment variables (`GIT_ASKPASS` or `GIT_CONFIG_PARAMETERS`) per-process using CliWrap, avoiding any persistent credential storage.
+
+**Guard rails:**
+- All other Git endpoints (`/git/load`, `/git/new`, `/git/save`, `/git/publish`, `/git/submit`) must return `400 Bad Request` with message `"Repository not initialized. Call POST /git/clone first."` if the repository path does not contain a valid Git repository. This check is implemented once in `GitService` as a shared guard method (`EnsureRepositoryExists()`).
+- The `/git/status` endpoint works regardless — it reports whether the repo is cloned or not.
 
 ---
 
@@ -275,12 +297,14 @@ A dedicated `DslCompilerService` receives structured JSON from the Power Platfor
 
 ## 8. Git Controller
 
-The Git controller manages branching, committing, and pull requests for the shared test codebase. Low-code developers interact with Git exclusively through these endpoints — they never touch Git directly.
+The Git controller manages the full Git lifecycle for the shared test codebase — from the initial clone through branching, committing, and pull requests. Low-code developers interact with Git exclusively through these endpoints — they never touch Git directly.
 
 ### Endpoints
 
 | Endpoint | Method | Description |
 |---|---|---|
+| `/git/clone` | POST | Clone the consumer repository to the configured local path |
+| `/git/status` | GET | Return the current repository status (branch, clean/dirty, clone state) |
 | `/git/load` | POST | Load (checkout) a branch as the current working branch |
 | `/git/new` | POST | Fetch + pull from main, then create a new branch from main |
 | `/git/save` | POST | Stage and commit changes on the current branch |
@@ -288,6 +312,52 @@ The Git controller manages branching, committing, and pull requests for the shar
 | `/git/submit` | POST | Create a pull request from the current branch to a target branch |
 
 ### Details
+
+**POST `/git/clone`**
+- Request: `{ "repositoryUrl": "https://github.com/org/repo.git" }`
+- Behavior:
+  1. The repository path is deterministic: `./data/repository` relative to the API's content root (computed by `TestProjectPaths`). There is no user-configurable path.
+  2. If the directory already contains a `.git` folder, returns `409 Conflict` — the repository is already cloned.
+  3. If the parent directory does not exist, creates it recursively.
+  4. Executes `git clone <repositoryUrl> <repositoryPath>`.
+  5. If `GitHub:Token` is configured, the clone URL is rewritten to include the token for HTTPS authentication: `https://<token>@github.com/org/repo.git`. The token is injected at clone time only — it is not persisted in the repository's remote URL. Instead, after cloning, the remote URL is reset to the original (token-free) URL via `git remote set-url origin <repositoryUrl>`.
+  6. After a successful clone, returns the current branch name.
+- Response: `{ "message": "Repository cloned successfully", "branch": "main", "path": "<repositoryPath>" }`
+- Errors:
+  - `400 Bad Request` — if `repositoryUrl` is missing or invalid (must be a valid Git URL).
+  - `409 Conflict` — if the repository is already cloned at the configured path.
+  - `500 Internal Server Error` — if `git clone` fails (includes stderr output: auth failure, network error, invalid repo, etc.).
+- Security:
+  - The `repositoryUrl` is validated against a URL allowlist pattern: must start with `https://` and match a known host (e.g. `github.com`, `dev.azure.com`). Raw SSH URLs are not supported to avoid key management complexity.
+  - The token is never logged or included in error responses.
+
+**GET `/git/status`**
+- Request: (no body)
+- Behavior:
+  1. Checks whether the deterministic repository path (`./data/repository`) contains a `.git` folder.
+  2. If not cloned, returns a status indicating the repository needs to be cloned first.
+  3. If cloned, runs `git status --porcelain` and `git rev-parse --abbrev-ref HEAD` to gather current state.
+- Response (cloned):
+  ```json
+  {
+    "cloned": true,
+    "branch": "feature/my-tests",
+    "clean": false,
+    "changedFiles": 3,
+    "path": "<repositoryPath>"
+  }
+  ```
+- Response (not cloned):
+  ```json
+  {
+    "cloned": false,
+    "branch": null,
+    "clean": null,
+    "changedFiles": null,
+    "path": "<repositoryPath>"
+  }
+  ```
+- Errors: `500` if the directory exists in a corrupt state (e.g. partial `.git` folder).
 
 **POST `/git/load`**
 - Request: `{ "branchName": "feature/my-tests" }`
@@ -527,11 +597,11 @@ internal static partial class DataExtensions
 | 1 | Core infrastructure (.NET 10 Minimal API, DI, folder structure) | Defined |
 | 2 | API Key middleware (single key, all routes) | Defined |
 | 3 | Error model (standard HTTP status codes) | Defined |
-| 4 | Git service (CLI via CliWrap) | Defined |
+| 4 | Git service (CLI via CliWrap — includes clone bootstrap) | Defined |
 | 5 | Test runner (`dotnet test` via CLI, TRX parsing) | Defined |
 | 6 | File management (Scriban for scaffolding, Roslyn for modification) | Defined |
 | 7 | DSL compiler service (JSON → C# via Roslyn) | Placeholder — awaiting DSL spec |
-| 8 | Git controller (5 endpoints) | Defined |
+| 8 | Git controller (7 endpoints — includes clone + status) | Defined |
 | 9 | Metadata controller (1 endpoint) | Defined |
 | 10 | Test controller (6 endpoints) | Defined |
 | 11 | Data producer controller (3 endpoints) | Defined |

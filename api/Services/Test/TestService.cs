@@ -9,12 +9,9 @@ public class TestService : ITestService
     private readonly IDslCompilerService _dslCompiler;
     private readonly IFileManagerService _fileManager;
 
-    public TestService(IConfiguration configuration, IDslCompilerService dslCompiler, IFileManagerService fileManager)
+    public TestService(TestProjectPaths paths, IDslCompilerService dslCompiler, IFileManagerService fileManager)
     {
-        var repositoryPath = configuration["TestProject:RepositoryPath"]
-            ?? throw new InvalidOperationException("TestProject:RepositoryPath not configured");
-        var testProjectRelativePath = configuration["TestProject:TestProjectPath"] ?? "Tests";
-        _testProjectPath = Path.Combine(repositoryPath, testProjectRelativePath);
+        _testProjectPath = paths.TestProjectPath;
         _dslCompiler = dslCompiler;
         _fileManager = fileManager;
     }

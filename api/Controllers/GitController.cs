@@ -10,6 +10,14 @@ public static class GitController
         var group = app.MapGroup("/git")
             .WithTags("Git");
 
+        group.MapPost("/clone", CloneRepository)
+            .WithName("CloneRepository")
+            .WithDescription("Clone the consumer repository to the local data directory");
+
+        group.MapGet("/status", GetStatus)
+            .WithName("GetStatus")
+            .WithDescription("Return the current repository status (branch, clean/dirty, clone state)");
+
         group.MapPost("/load", LoadBranch)
             .WithName("LoadBranch")
             .WithDescription("Load (checkout) a branch as the current working branch");
@@ -31,12 +39,50 @@ public static class GitController
             .WithDescription("Create a pull request from the current branch to a target branch");
     }
 
+    private static async Task<IResult> CloneRepository(CloneRepositoryRequest request, IGitService gitService)
+    {
+        try
+        {
+            var result = await gitService.CloneRepositoryAsync(request.RepositoryUrl);
+            return Results.Ok(result);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("already cloned"))
+        {
+            return Results.Conflict(ex.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.BadRequest($"Bad request: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Internal error: {ex.Message}");
+        }
+    }
+
+    private static async Task<IResult> GetStatus(IGitService gitService)
+    {
+        try
+        {
+            var status = await gitService.GetStatusAsync();
+            return Results.Ok(status);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Internal error: {ex.Message}");
+        }
+    }
+
     private static async Task<IResult> LoadBranch(LoadBranchRequest request, IGitService gitService)
     {
         try
         {
             await gitService.LoadBranchAsync(request.BranchName);
             return Results.Ok(new { message = $"Switched to branch '{request.BranchName}'" });
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not initialized"))
+        {
+            return Results.BadRequest(ex.Message);
         }
         catch (FileNotFoundException)
         {
@@ -54,6 +100,10 @@ public static class GitController
         {
             await gitService.CreateNewBranchAsync(request.BranchName);
             return Results.Ok(new { message = $"Created and switched to branch '{request.BranchName}'" });
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not initialized"))
+        {
+            return Results.BadRequest(ex.Message);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("already exists"))
         {
@@ -75,6 +125,10 @@ public static class GitController
         {
             await gitService.SaveChangesAsync(request.Message);
             return Results.Ok(new { message = "Changes committed successfully" });
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not initialized"))
+        {
+            return Results.BadRequest(ex.Message);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("Nothing to commit"))
         {
@@ -98,6 +152,10 @@ public static class GitController
             var currentBranch = await gitService.GetCurrentBranchAsync();
             return Results.Ok(new { message = $"Branch '{currentBranch}' pushed to remote" });
         }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not initialized"))
+        {
+            return Results.BadRequest(ex.Message);
+        }
         catch (Exception ex) when (ex.Message.Contains("rejected"))
         {
             return Results.Conflict($"Push rejected: {ex.Message}");
@@ -114,6 +172,10 @@ public static class GitController
         {
             var prUrl = await gitService.CreatePullRequestAsync(request.TargetBranch, request.Title, request.Description ?? "");
             return Results.Ok(new { message = "Pull request created", url = prUrl });
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not initialized"))
+        {
+            return Results.BadRequest(ex.Message);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("no remote"))
         {

@@ -8,12 +8,9 @@ public class DataProducerService : IDataProducerService
     private readonly string _dataProducersPath;
     private readonly IFileManagerService _fileManager;
 
-    public DataProducerService(IConfiguration configuration, IFileManagerService fileManager)
+    public DataProducerService(TestProjectPaths paths, IFileManagerService fileManager)
     {
-        var repositoryPath = configuration["TestProject:RepositoryPath"]
-            ?? throw new InvalidOperationException("TestProject:RepositoryPath not configured");
-        var dataProducersRelativePath = configuration["TestProject:DataProducersPath"] ?? "Tests\\DataProducers";
-        _dataProducersPath = Path.Combine(repositoryPath, dataProducersRelativePath);
+        _dataProducersPath = paths.DataProducersPath;
         _fileManager = fileManager;
     }
 

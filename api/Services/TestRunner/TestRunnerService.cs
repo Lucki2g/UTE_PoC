@@ -10,12 +10,10 @@ public class TestRunnerService : ITestRunnerService
     private readonly string _repositoryPath;
     private readonly string _testProjectPath;
 
-    public TestRunnerService(IConfiguration configuration)
+    public TestRunnerService(TestProjectPaths paths)
     {
-        _repositoryPath = configuration["TestProject:RepositoryPath"]
-            ?? throw new InvalidOperationException("TestProject:RepositoryPath not configured");
-        var testProjectRelativePath = configuration["TestProject:TestProjectPath"] ?? "Tests";
-        _testProjectPath = Path.Combine(_repositoryPath, testProjectRelativePath);
+        _repositoryPath = paths.RepositoryPath;
+        _testProjectPath = paths.TestProjectPath;
     }
 
     public async Task<TestRunResult> RunTestAsync(string testName)

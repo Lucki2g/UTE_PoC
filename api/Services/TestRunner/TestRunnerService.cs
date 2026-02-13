@@ -38,7 +38,7 @@ public class TestRunnerService : ITestRunnerService
                 .WithArguments([
                     "test",
                     "--no-build",
-                    "--filter", $"FullyQualifiedName={testName}",
+                    "--filter", $"FullyQualifiedName~{testName}",
                     "--logger", $"trx;LogFileName={resultsFile}"
                 ])
                 .WithWorkingDirectory(_testProjectPath)

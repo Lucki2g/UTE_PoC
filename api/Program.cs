@@ -5,6 +5,9 @@ using TestEngine.Controllers;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Load optional local settings (git-ignored)
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+
 // Add services to the container
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -31,6 +34,10 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
+
+// Register configuration
+builder.Services.Configure<DataverseOptions>(builder.Configuration.GetSection("Dataverse"));
+builder.Services.Configure<MetadataToolsOptions>(builder.Configuration.GetSection("MetadataTools"));
 
 // Register services
 builder.Services.AddSingleton<TestProjectPaths>();

@@ -1,6 +1,6 @@
-using System.Xml.Linq;
 using CliWrap;
 using CliWrap.Buffered;
+using System.Xml.Linq;
 using TestEngine.Models.Responses;
 
 namespace TestEngine.Services;
@@ -46,6 +46,10 @@ public class TestRunnerService : ITestRunnerService
                 .ExecuteBufferedAsync();
 
             return ParseTrxResult(resultsFile, result.StandardOutput + result.StandardError);
+        }
+        catch (Exception e)
+        {
+            throw new FileNotFoundException($"Failed to build or run testcase at {_testProjectPath}/{testName}");
         }
         finally
         {

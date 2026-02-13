@@ -1,24 +1,47 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using TestEngine.Models.Dsl;
 
 namespace TestEngine.Services;
 
 public class DslCompilerService : IDslCompilerService
 {
-    public Task<string> CompileToCSharpAsync(DslTestDefinition dsl)
+    public Task<DslCompileResult> CompileToCSharpAsync(DslTestDefinition dsl, DslCompileOptions? options = null)
     {
-        // TODO: Implement DSL to C# compilation using Roslyn
-        throw new NotImplementedException("DSL to C# compilation not yet implemented. Awaiting DSL schema specification.");
+        options ??= new DslCompileOptions();
+        var compiler = new DslToCSharpCompiler(options);
+        var result = compiler.Compile(dsl);
+        return Task.FromResult(result);
     }
 
-    public Task<DslTestDefinition> DecompileFromCSharpAsync(string csharpCode)
+    public Task<DslDecompileResult> DecompileFromCSharpAsync(string csharpCode)
     {
-        // TODO: Implement C# to DSL decompilation using Roslyn
-        throw new NotImplementedException("C# to DSL decompilation not yet implemented. Awaiting DSL schema specification.");
+        var decompiler = new CSharpToDslDecompiler();
+        var result = decompiler.Decompile(csharpCode);
+        return Task.FromResult(result);
     }
 
-    public Task<bool> ValidateGeneratedCodeAsync(string csharpCode)
+    public Task<DslValidationResult> ValidateGeneratedCodeAsync(string csharpCode)
     {
-        // TODO: Use Roslyn to validate that the generated code compiles
-        throw new NotImplementedException("Code validation not yet implemented.");
+        var tree = CSharpSyntaxTree.ParseText(csharpCode);
+        var diagnostics = tree.GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .Select(d => new DslDiagnostic
+            {
+                Code = d.Id,
+                Message = d.GetMessage(),
+                Location = new DslDiagnosticLocation
+                {
+                    Section = "syntax",
+                    Hint = d.Location.GetLineSpan().ToString()
+                }
+            })
+            .ToList();
+
+        return Task.FromResult(new DslValidationResult
+        {
+            IsValid = diagnostics.Count == 0,
+            Diagnostics = diagnostics
+        });
     }
 }

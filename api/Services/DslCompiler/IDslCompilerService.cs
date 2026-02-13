@@ -4,7 +4,7 @@ namespace TestEngine.Services;
 
 public interface IDslCompilerService
 {
-    Task<string> CompileToCSharpAsync(DslTestDefinition dsl);
-    Task<DslTestDefinition> DecompileFromCSharpAsync(string csharpCode);
-    Task<bool> ValidateGeneratedCodeAsync(string csharpCode);
+    Task<DslCompileResult> CompileToCSharpAsync(DslTestDefinition dsl, DslCompileOptions? options = null);
+    Task<DslDecompileResult> DecompileFromCSharpAsync(string csharpCode);
+    Task<DslValidationResult> ValidateGeneratedCodeAsync(string csharpCode);
 }

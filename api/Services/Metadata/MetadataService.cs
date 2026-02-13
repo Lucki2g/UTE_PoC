@@ -29,6 +29,7 @@ public class MetadataService : IMetadataService
 
         await RunXrmContextAsync(connectionString, environmentUrl);
         await RunMetadataGeneratorAsync(connectionString, environmentUrl);
+        await RunWorkflowAsync(connectionString, environmentUrl);
     }
 
     private async Task RunXrmContextAsync(string connectionString, string? environmentUrl)
@@ -88,6 +89,11 @@ public class MetadataService : IMetadataService
             args.Add(extra);
 
         await RunToolAsync(exePath, args, "MetadataGenerator365");
+    }
+
+    private async Task RunWorkflowAsync(string connectionString, string? environmentUrl)
+    {
+        throw new NotImplementedException();
     }
 
     private async Task RunToolAsync(string exePath, List<string> arguments, string toolName)

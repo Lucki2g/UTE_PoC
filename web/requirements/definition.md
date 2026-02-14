@@ -220,6 +220,47 @@ Contains:
 -   Build toggle block
 -   Custom extension methods from `/extensions`
 
+## 8.2 With Block (Detailed Behavior)
+
+The **With block** modifies a DataProducer draft before execution.\
+It represents a field assignment constraint.
+
+### Structure
+
+  -----------------------------------------------------------------------
+  Element                          Description
+  -------------------------------- --------------------------------------
+  Field selector                   Searchable dropdown of Dataverse
+                                   columns for the producer's entity (from code app dataverse connector)
+
+  Operator                         Fixed as `=` (initial version)
+
+  Value input                      Dynamically typed input based on
+                                   column metadata
+  -----------------------------------------------------------------------
+
+### Dynamic Value Input Rules
+
+  Column Type                UI Control
+  -------------------------- -------------------------------------------
+  Text                       Text input
+  Number                     Numeric input
+  Boolean                    Toggle
+  Choice (OptionSet)         Dropdown
+  Lookup / EntityReference   Dropdown of previous DataProducer outputs
+  DateTime                   Date picker
+
+### Lookup Rules
+
+-   Only list outputs from previous DataProducers
+-   Must match compatible entity types
+-   Prevent circular references
+
+### Build Toggle
+
+-   false: draft configured but not persisted\
+-   true: calls `.Build()` in DSL and persists in mock context
+
 ------------------------------------------------------------------------
 
 ### 8.3 LINQ Tab
@@ -227,6 +268,38 @@ Contains:
 Initial version supports:
 
 -   Where expression
+
+## 8.3. LINQ - Where Block (Detailed Behavior)
+
+The **Where block** defines filtering logic for RetrieveList.
+
+It may only be dropped onto a RetrieveList node.
+
+## Structure
+
+  Element             Description
+  ------------------- ---------------------------------------
+  Column selector     Searchable dropdown of entity columns (from code app dataverse connector)
+  Operator selector   Depends on column type
+  Value input         Dynamically typed input
+
+## Supported Operators
+
+  Column Type   Supported Operators
+  ------------- -------------------------------
+  Text          equals, contains
+  Number        equals, greaterThan, lessThan
+  Boolean       equals
+  Choice        equals
+  Lookup        equals
+  DateTime      equals, before, after
+
+## Rules
+
+-   Multiple Where blocks allowed
+-   Combined using logical AND
+-   Only valid on RetrieveList
+-   Same dynamic typing rules as With block
 
 ------------------------------------------------------------------------
 

@@ -10,8 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@fluentui/react": "^8.125.4",
+    "@fluentui/react-components": "^9.73.0",
+    "@fluentui/react-icons": "^2.0.319",
     "@microsoft/power-apps": "^1.0.3",
+    "@xyflow/react": "^12.10.0",
     "eslint-plugin-react": "^7.37.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"

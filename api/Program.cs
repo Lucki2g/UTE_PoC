@@ -1,9 +1,25 @@
 using Microsoft.OpenApi.Models;
+using TestEngine.Controllers;
 using TestEngine.Middleware;
 using TestEngine.Services;
-using TestEngine.Controllers;
 
+const string CorsOrigins = "_corsOrigins";
 var builder = WebApplication.CreateBuilder(args);
+
+// CORS configuration
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(name: CorsOrigins,
+                      policy =>
+                      {
+                          policy
+                            .WithOrigins(
+                              "https://localhost:5173",
+                              "http://localhost:5173")
+                            .AllowAnyHeader()
+                            .AllowAnyMethod();
+                      });
+});
 
 // Load optional local settings (git-ignored)
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
@@ -60,6 +76,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors(CorsOrigins);
 
 // Add API Key middleware
 app.UseMiddleware<ApiKeyMiddleware>();

@@ -14,6 +14,12 @@ public class ApiKeyMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        if (context.Request.Method == HttpMethods.Options)
+        {
+            await _next(context);
+            return;
+        }
+
         if (!context.Request.Headers.TryGetValue(ApiKeyHeaderName, out var providedApiKey))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;

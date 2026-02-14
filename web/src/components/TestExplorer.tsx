@@ -10,6 +10,7 @@ import {
     Tree,
     TreeItem,
     TreeItemLayout,
+    Tooltip,
     makeStyles,
     tokens,
     type SearchBoxProps,
@@ -110,6 +111,7 @@ const useStyles = makeStyles({
     content: {
         flex: 1,
         overflowY: "auto",
+        overflowX: "hidden",
         padding: tokens.spacingHorizontalS,
     },
     errorDetail: {
@@ -137,9 +139,33 @@ const useStyles = makeStyles({
     openIcon: {
         color: tokens.colorNeutralForeground2,
     },
+    treeItemLayout: {
+        overflow: "hidden",
+        // The main content span inside TreeItemLayout must also constrain
+        "& .fui-TreeItemLayout__main": {
+            overflow: "hidden",
+            minWidth: 0,
+            flex: 1,
+        },
+    },
+    nodeRow: {
+        display: "flex",
+        alignItems: "center",
+        overflow: "hidden",
+        minWidth: 0,
+    },
+    nodeLabel: {
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        minWidth: 0,
+        flex: 1,
+        display: "block",
+    },
     actionButtons: {
         display: "flex",
         marginLeft: "auto",
+        flexShrink: 0,
         gap: "2px",
     },
     results: {
@@ -148,6 +174,7 @@ const useStyles = makeStyles({
         minHeight: "80px",
         maxHeight: "200px",
         overflowY: "auto",
+        overflowX: "hidden",
     },
     resultHeader: {
         fontWeight: tokens.fontWeightSemibold,
@@ -176,11 +203,35 @@ const useStyles = makeStyles({
 
 // ─── Result icon ─────────────────────────────────────────────────────────────
 
-function ResultIcon({ result, running }: { result?: TestRunResult; running?: boolean }) {
-    if (running) return <Spinner size="extra-tiny" />;
-    if (!result) return <CircleRegular fontSize={16} />;
-    if (result.passed) return <CheckmarkCircleFilled fontSize={16} color={tokens.colorPaletteGreenForeground1} />;
-    return <DismissCircleFilled fontSize={16} color={tokens.colorPaletteRedForeground1} />;
+type AggregateStatus = "none" | "running" | "skipped" | "failed" | "passed";
+
+function getAggregateStatus(
+    node: TestTreeNode,
+    results: Map<string, TestRunResult>,
+    runningTests: Set<string>,
+): AggregateStatus {
+    if (node.method) {
+        if (runningTests.has(node.fullPath)) return "running";
+        const r = results.get(node.fullPath);
+        if (!r) return "none";
+        return r.passed ? "passed" : "failed";
+    }
+    const childStatuses = node.children.map((c) => getAggregateStatus(c, results, runningTests));
+    if (childStatuses.some((s) => s === "running")) return "running";
+    // "none" on a child that has no result yet means it was skipped / not run
+    if (childStatuses.some((s) => s === "none")) return "skipped";
+    if (childStatuses.some((s) => s === "failed")) return "failed";
+    if (childStatuses.every((s) => s === "passed")) return "passed";
+    return "none";
+}
+
+function ResultIcon({ status }: { status: AggregateStatus }) {
+    switch (status) {
+        case "running": return <Spinner size="extra-tiny" />;
+        case "passed":  return <CheckmarkCircleFilled fontSize={16} color={tokens.colorPaletteGreenForeground1} />;
+        case "failed":  return <DismissCircleFilled fontSize={16} color={tokens.colorPaletteRedForeground1} />;
+        default:        return <CircleRegular fontSize={16} />;
+    }
 }
 
 // ─── Recursive tree renderer ─────────────────────────────────────────────────
@@ -210,8 +261,7 @@ function TestTreeItem({
     const isExpanded = expanded.has(node.fullPath);
     const hasChildren = node.children.length > 0;
     const isMethod = !!node.method;
-    const result = isMethod ? results.get(node.fullPath) : undefined;
-    const isRunning = isMethod && runningTests.has(node.fullPath);
+    const status = getAggregateStatus(node, results, runningTests);
     const isSelected = selected === node.fullPath;
 
     return (
@@ -221,7 +271,8 @@ function TestTreeItem({
             value={node.fullPath}
         >
             <TreeItemLayout
-                iconBefore={<ResultIcon result={result} running={isRunning} />}
+                className={styles.treeItemLayout}
+                iconBefore={<ResultIcon status={status} />}
                 onClick={() => {
                     if (hasChildren) onToggle(node.fullPath);
                     onSelect(node.fullPath);
@@ -236,18 +287,12 @@ function TestTreeItem({
                 style={{
                     backgroundColor: isSelected ? tokens.colorNeutralBackground1Selected : undefined,
                     borderRadius: tokens.borderRadiusMedium,
-                    display: "flex",
-                    alignItems: "center",
-                    width: "100%",
-                    gap: "4px",
                 }}
             >
-                <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    width: "100%",
-                }}>
-                    <Text size={200} title={node.fullPath}>{node.label}{hasChildren ? ` [${node.children.length}]` : ""}</Text>
+                <div className={styles.nodeRow}>
+                    <Tooltip content={node.fullPath} relationship="label" withArrow>
+                        <Text size={200} className={styles.nodeLabel}>{node.label}{hasChildren ? ` [${node.children.length}]` : ""}</Text>
+                    </Tooltip>
                     <div className={styles.actionButtons}>
                         {isMethod && node.test && (
                             <Button
@@ -258,7 +303,7 @@ function TestTreeItem({
                                     e.stopPropagation();
                                     onRun(`${node.test!.className}.${node.method!}`);
                                 }}
-                                disabled={isRunning}
+                                disabled={status === "running"}
                                 title="Run test"
                             />
                         )}
@@ -392,6 +437,8 @@ export function TestExplorer() {
     useEffect(() => {
         tests.fetchAll();
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    console.log(tests.tests)
 
     const tree = useMemo(() => buildTree(tests.tests), [tests.tests]);
     const filtered = useMemo(() => filterTree(tree, search), [tree, search]);

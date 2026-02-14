@@ -61,17 +61,10 @@ public class TestRunnerService : ITestRunnerService
 
         try
         {
-            // Build the project first
-            await Cli.Wrap("dotnet")
-                .WithArguments(["build", "--no-incremental"])
-                .WithWorkingDirectory(_testProjectPath)
-                .ExecuteAsync();
-
             // Run all tests
             var result = await Cli.Wrap("dotnet")
                 .WithArguments([
                     "test",
-                    "--no-build",
                     "--logger", $"trx;LogFileName={resultsFile}"
                 ])
                 .WithWorkingDirectory(_testProjectPath)
@@ -149,6 +142,24 @@ public class TestRunnerService : ITestRunnerService
         var doc = XDocument.Load(trxFilePath);
         var ns = doc.Root?.GetDefaultNamespace() ?? XNamespace.None;
 
+        // Build a lookup from testId → short class name (file-name style) for matching frontend keys.
+        // TRX TestDefinitions contain: <UnitTest id="..."> <TestMethod className="Namespace.ClassName" .../>
+        var classNameByTestId = new Dictionary<string, string>();
+        foreach (var unitTest in doc.Descendants(ns + "UnitTest"))
+        {
+            var id = unitTest.Attribute("id")?.Value;
+            var testMethod = unitTest.Descendants(ns + "TestMethod").FirstOrDefault();
+            var fullClassName = testMethod?.Attribute("className")?.Value;
+            if (id != null && fullClassName != null)
+            {
+                // The frontend uses the file name (last segment of the namespace-qualified class name)
+                var shortClassName = fullClassName.Contains('.')
+                    ? fullClassName[(fullClassName.LastIndexOf('.') + 1)..]
+                    : fullClassName;
+                classNameByTestId[id] = shortClassName;
+            }
+        }
+
         var unitTestResults = doc.Descendants(ns + "UnitTestResult").ToList();
         result.Total = unitTestResults.Count;
 
@@ -156,9 +167,17 @@ public class TestRunnerService : ITestRunnerService
         {
             var outcome = unitTestResult.Attribute("outcome")?.Value ?? "Failed";
             var duration = unitTestResult.Attribute("duration")?.Value ?? "0s";
-            var testName = unitTestResult.Attribute("testName")?.Value ?? "Unknown";
+            var rawTestName = unitTestResult.Attribute("testName")?.Value ?? "Unknown";
+            // testName in TRX can be fully qualified (Namespace.Class.Method); extract just the method name
+            var methodName = rawTestName.Contains('.') ? rawTestName[(rawTestName.LastIndexOf('.') + 1)..] : rawTestName;
+            var testId = unitTestResult.Attribute("testId")?.Value;
             var errorMessage = unitTestResult.Descendants(ns + "Message").FirstOrDefault()?.Value;
             var stackTrace = unitTestResult.Descendants(ns + "StackTrace").FirstOrDefault()?.Value;
+
+            // Build fully qualified test name as "ClassName.MethodName" to match frontend keys
+            var testName = testId != null && classNameByTestId.TryGetValue(testId, out var className)
+                ? $"{className}.{methodName}"
+                : methodName;
 
             var passed = outcome.Equals("Passed", StringComparison.OrdinalIgnoreCase);
             if (passed)

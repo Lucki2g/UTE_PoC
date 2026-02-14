@@ -57,7 +57,6 @@ export function Header() {
         <header className={styles.header}>
             <div className={styles.brand}>
                 <img src={bannerIcon} alt="TestEngine" className={styles.brandIcon} />
-                <Text weight="semibold" size={400}>TestEngine</Text>
             </div>
 
             <Toolbar className={styles.status}>

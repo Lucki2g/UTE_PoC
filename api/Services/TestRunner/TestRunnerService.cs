@@ -27,17 +27,10 @@ public class TestRunnerService : ITestRunnerService
 
         try
         {
-            // Build the project first
-            await Cli.Wrap("dotnet")
-                .WithArguments(["build", "--no-incremental"])
-                .WithWorkingDirectory(_testProjectPath)
-                .ExecuteAsync();
-
             // Run the specific test
             var result = await Cli.Wrap("dotnet")
                 .WithArguments([
                     "test",
-                    "--no-build",
                     "--filter", $"FullyQualifiedName~{testName}",
                     "--logger", $"trx;LogFileName={resultsFile}"
                 ])

@@ -203,22 +203,58 @@ export interface DslPredicateLeft {
     path: string[];
 }
 
-// ─── DSL Producer Definition ─────────────────────────────────────────────────
+// ─── DSL Producer Definition (spec v1.0) ────────────────────────────────────
 
 export interface DslProducerDefinition {
-    draft?: DslDraft;
+    dslVersion: string;
+    producer: string;
+    drafts: DslDraftDefinition[];
 }
 
-export interface DslDraft {
-    entity?: string;
-    useExisting: boolean;
-    ensure?: DslEnsureField[];
+export interface DslDraftDefinition {
+    id: string;
+    entity: DslDraftEntity;
+    accessModifier: string;
+    rules: DslDraftRule[];
 }
 
-export interface DslEnsureField {
-    field?: string;
-    value?: DslFieldValue;
+export interface DslDraftEntity {
+    logicalName: string;
+    type: string;
 }
+
+export interface DslDraftRule {
+    type: string;
+    attribute: string;
+    value: DslDraftValue;
+}
+
+export type DslDraftValue =
+    | DslDraftConstantValue
+    | DslDraftEnumValue
+    | DslDraftReferenceValue;
+
+export interface DslDraftConstantValue {
+    kind: "constant";
+    type: string;
+    value: string | number | boolean;
+}
+
+export interface DslDraftEnumValue {
+    kind: "enum";
+    enumType: string;
+    value: string;
+}
+
+export interface DslDraftReferenceValue {
+    kind: "reference";
+    draft: string;
+    self?: boolean;
+    build: boolean;
+    transform?: string;
+}
+
+// ─── DSL Field Value (used by Extensions) ───────────────────────────────────
 
 export interface DslFieldValue {
     enum?: string;

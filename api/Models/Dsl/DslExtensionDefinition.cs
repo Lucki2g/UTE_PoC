@@ -31,3 +31,15 @@ public class DslSetField
     [JsonPropertyName("value")]
     public DslFieldValue? Value { get; set; }
 }
+
+public class DslFieldValue
+{
+    [JsonPropertyName("enum")]
+    public string? Enum { get; set; }
+
+    [JsonPropertyName("gen")]
+    public string? Gen { get; set; }
+
+    [JsonPropertyName("literal")]
+    public string? Literal { get; set; }
+}

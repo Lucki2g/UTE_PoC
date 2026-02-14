@@ -5,6 +5,7 @@ import type { DslWithMutation } from "./dsl.ts";
 
 export interface ProducerNodeData {
     nodeType: "producer";
+    draftId: string;
     entityName: string;
     variableName: string;
     build: boolean;

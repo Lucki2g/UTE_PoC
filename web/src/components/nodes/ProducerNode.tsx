@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import {
     Input,
-    Checkbox,
+    Switch,
     Text,
     makeStyles,
     tokens,
@@ -28,7 +28,7 @@ const useStyles = makeStyles({
         alignItems: "center",
         gap: tokens.spacingHorizontalXS,
         padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
-        backgroundColor: tokens.colorPaletteLightTealBackground2,
+        backgroundColor: tokens.colorPaletteYellowBackground1,
         borderRadius: `${tokens.borderRadiusLarge} ${tokens.borderRadiusLarge} 0 0`,
         borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
     },
@@ -71,7 +71,7 @@ export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
         <div className={`${styles.node} ${selected ? styles.selected : ""}`}>
             <div className={styles.header}>
                 <img src={dataproducerIcon} alt="" className={styles.icon} />
-                <Text size={200} weight="semibold">Draft&lt;{nodeData.entityName}&gt;</Text>
+                <Text size={200} weight="semibold">{nodeData.draftId ?? nodeData.entityName}</Text>
             </div>
 
             <div className={styles.body}>
@@ -91,16 +91,16 @@ export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
                 </div>
 
                 <div className={styles.field}>
-                    <Checkbox
+                    <Switch
                         label="Build"
-                        size="medium"
                         checked={nodeData.build}
                         onChange={(_ev, data) =>
                             dispatch({
                                 type: "UPDATE_NODE",
-                                payload: { id, data: { build: !!data.checked } },
+                                payload: { id, data: { build: data.checked } },
                             })
                         }
+                        style={{ fontSize: tokens.fontSizeBase200 }}
                     />
                 </div>
 

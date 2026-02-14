@@ -31,7 +31,7 @@ const useStyles = makeStyles({
         alignItems: "center",
         gap: tokens.spacingHorizontalXS,
         padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
-        backgroundColor: tokens.colorPaletteYellowBackground1,
+        backgroundColor: tokens.colorPaletteLavenderBackground2,
         borderRadius: `${tokens.borderRadiusLarge} ${tokens.borderRadiusLarge} 0 0`,
         borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
     },

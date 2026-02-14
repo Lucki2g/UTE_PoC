@@ -1,17 +1,29 @@
-import { useCallback, useMemo, type DragEvent } from "react";
+import { useCallback, useMemo, useState, type DragEvent } from "react";
+import { UnsavedChangesDialog } from "./UnsavedChangesDialog.tsx";
 import {
     Text,
     Button,
     Toolbar,
     ToolbarButton,
+    Dialog,
+    DialogTrigger,
+    DialogSurface,
+    DialogBody,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Input,
+    Badge,
     makeStyles,
     tokens,
 } from "@fluentui/react-components";
 import {
     AddRegular,
-    DeleteRegular,
     SaveRegular,
     HexagonRegular,
+    BeakerDismissRegular,
+    BeakerEditRegular,
+    BeakerSettingsRegular,
 } from "@fluentui/react-icons";
 import {
     ReactFlow,
@@ -83,12 +95,20 @@ const useStyles = makeStyles({
         height: "100%",
         gap: tokens.spacingVerticalM,
     },
+    dirtyBadge: {
+        marginLeft: tokens.spacingHorizontalXS,
+        backgroundColor: tokens.colorPaletteDarkOrangeBackground3,
+    },
 });
 
 export function BuilderPane() {
     const { state, dispatch } = useBuilderContext();
     const tests = useTests();
     const styles = useStyles();
+
+    const [newDialogOpen, setNewDialogOpen] = useState(false);
+    const [newTestName, setNewTestName] = useState("");
+    const [closeWarningOpen, setCloseWarningOpen] = useState(false);
 
     const onNodesChange: OnNodesChange<BuilderNode> = useCallback(
         (changes) => {
@@ -134,9 +154,10 @@ export function BuilderPane() {
 
             switch (type) {
                 case "producer": {
-                    const producer = JSON.parse(rawData) as { entityName: string };
+                    const producer = JSON.parse(rawData) as { entityName: string; draftId?: string };
                     const data: ProducerNodeData = {
                         nodeType: "producer",
+                        draftId: producer.draftId ?? producer.entityName,
                         entityName: producer.entityName,
                         variableName: producer.entityName.toLowerCase(),
                         build: false,
@@ -202,29 +223,6 @@ export function BuilderPane() {
         [dispatch, nextY, state.nodes, state.edges],
     );
 
-    const addServiceNode = useCallback(() => {
-        const data: ServiceNodeData = {
-            nodeType: "service",
-            operation: "Create",
-            whereExpressions: [],
-        };
-        const node: BuilderNode = {
-            id: nextId(),
-            type: "service",
-            position: { x: NODE_X, y: nextY },
-            data,
-        };
-        dispatch({ type: "ADD_NODE", payload: node });
-
-        if (state.nodes.length > 0) {
-            const lastNode = state.nodes[state.nodes.length - 1];
-            dispatch({
-                type: "SET_EDGES",
-                payload: [...state.edges, { id: `e_${lastNode.id}_${node.id}`, source: lastNode.id, target: node.id }],
-            });
-        }
-    }, [dispatch, nextY, state.nodes, state.edges]);
-
     const handleSave = useCallback(async () => {
         if (!state.testName) return;
         const dsl = generateDsl(state.nodes, state.testName);
@@ -236,7 +234,50 @@ export function BuilderPane() {
         dispatch({ type: "MARK_CLEAN" });
     }, [state, tests, dispatch]);
 
+    const handleSaveAndPublish = useCallback(async () => {
+        if (!state.testName) return;
+        const dsl = generateDsl(state.nodes, state.testName);
+        if (state.testClassName) {
+            await tests.update({ className: state.testClassName, code: dsl });
+        } else {
+            await tests.create({ code: dsl });
+        }
+        dispatch({ type: "MARK_CLEAN" });
+    }, [state, tests, dispatch]);
+
+    const handleClose = useCallback(() => {
+        if (state.dirty) {
+            setCloseWarningOpen(true);
+            return;
+        }
+        dispatch({ type: "CLEAR" });
+    }, [state.dirty, dispatch]);
+
+    const handleConfirmClose = useCallback(() => {
+        setCloseWarningOpen(false);
+        dispatch({ type: "CLEAR" });
+    }, [dispatch]);
+
+    const handleCreateNew = useCallback(() => {
+        const name = newTestName.trim();
+        if (!name) return;
+        dispatch({ type: "CLEAR" });
+        dispatch({
+            type: "SET_DIAGRAM",
+            payload: {
+                nodes: [],
+                edges: [],
+                testName: name,
+                testClassName: null,
+                dirty: false,
+            },
+        });
+        setNewDialogOpen(false);
+        setNewTestName("");
+    }, [dispatch, newTestName]);
+
     const isEmpty = state.nodes.length === 0;
+    const hasTestOpen = !!state.testName;
 
     return (
         <div className={styles.pane}>
@@ -248,28 +289,71 @@ export function BuilderPane() {
                     </Text>
                 )}
                 <Toolbar style={{ marginLeft: "auto" }}>
-                    <ToolbarButton
-                        icon={<AddRegular />}
-                        onClick={addServiceNode}
-                    >
-                        Service
-                    </ToolbarButton>
-                    <ToolbarButton
-                        icon={<DeleteRegular />}
-                        onClick={() => dispatch({ type: "CLEAR" })}
-                    >
-                        Clear
-                    </ToolbarButton>
-                    {state.testName && (
-                        <Button
-                            appearance="primary"
-                            size="small"
-                            icon={<SaveRegular />}
-                            onClick={handleSave}
-                            disabled={!state.dirty}
-                        >
-                            Save
-                        </Button>
+                    {!hasTestOpen && (
+                        <Dialog open={newDialogOpen} onOpenChange={(_e, data) => setNewDialogOpen(data.open)}>
+                            <DialogTrigger disableButtonEnhancement>
+                                <ToolbarButton icon={<AddRegular />}>
+                                    New
+                                </ToolbarButton>
+                            </DialogTrigger>
+                            <DialogSurface>
+                                <DialogBody>
+                                    <DialogTitle>New Test Case</DialogTitle>
+                                    <DialogContent>
+                                        <Input
+                                            placeholder="Test case name"
+                                            value={newTestName}
+                                            onChange={(_ev, data) => setNewTestName(data.value)}
+                                            onKeyDown={(e) => { if (e.key === "Enter") handleCreateNew(); }}
+                                            style={{ width: "100%" }}
+                                        />
+                                    </DialogContent>
+                                    <DialogActions>
+                                        <DialogTrigger disableButtonEnhancement>
+                                            <Button appearance="secondary">Cancel</Button>
+                                        </DialogTrigger>
+                                        <Button
+                                            appearance="primary"
+                                            onClick={handleCreateNew}
+                                            disabled={!newTestName.trim()}
+                                        >
+                                            Create
+                                        </Button>
+                                    </DialogActions>
+                                </DialogBody>
+                            </DialogSurface>
+                        </Dialog>
+                    )}
+                    {hasTestOpen && (
+                        <div style={{ display: "flex", gap: tokens.spacingHorizontalS }}>
+                            <Button
+                                appearance="subtle"
+                                size="small"
+                                icon={<SaveRegular />}
+                                onClick={handleSave}
+                                disabled={!state.dirty}
+                            >
+                                Save
+                            </Button>
+                            <Button
+                                appearance="primary"
+                                size="small"
+                                icon={<BeakerEditRegular />}
+                                onClick={handleSaveAndPublish}
+                                disabled={!state.dirty}
+                            >
+                                Save & Publish
+                            </Button>
+                            <Button
+                                appearance="secondary"
+                                size="small"
+                                icon={<BeakerDismissRegular />}
+                                onClick={handleClose}
+                                disabled={!state.dirty}
+                            >
+                                Close
+                            </Button>
+                        </div>
                     )}
                 </Toolbar>
             </div>
@@ -300,9 +384,24 @@ export function BuilderPane() {
                     >
                         <Background />
                         <Controls />
+                        {state.dirty && (
+                            <div style={{ position: "absolute", top: tokens.spacingVerticalM, right: tokens.spacingHorizontalM }}>
+                                <Badge icon={<BeakerSettingsRegular />} size="medium" className={styles.dirtyBadge}>
+                                    Unsaved Changes
+                                </Badge>
+                            </div>
+                        )}
                     </ReactFlow>
                 )}
             </div>
+
+            <UnsavedChangesDialog
+                open={closeWarningOpen}
+                onDiscard={handleConfirmClose}
+                onCancel={() => setCloseWarningOpen(false)}
+                message="You have unsaved changes. Are you sure you want to close?"
+                discardLabel="Discard & Close"
+            />
         </div>
     );
 }

@@ -99,20 +99,33 @@ function ProducersTab() {
 
     if (loading) return <Spinner size="small" label="Loading producers..." />;
 
+    const drafts = producers.flatMap((p) =>
+        (p.dsl?.drafts ?? []).map((d) => ({
+            draftId: d.id,
+            entityName: p.entityName,
+            producer: p,
+        }))
+    );
+
     return (
         <div>
-            {producers.map((p) => (
+            {drafts.map((d) => (
                 <div
-                    key={p.entityName}
+                    key={d.draftId}
                     className={styles.item}
                     draggable
-                    onDragStart={(e) => onDragStart(e, "producer", JSON.stringify(p))}
+                    onDragStart={(e) =>
+                        onDragStart(e, "producer", JSON.stringify({
+                            entityName: d.entityName,
+                            draftId: d.draftId,
+                        }))
+                    }
                 >
                     <img className={styles.itemIcon} src={dataproducerIcon} alt="" />
-                    <Text size={200}>Draft&lt;{p.entityName}&gt;</Text>
+                    <Text size={200}>{d.draftId}</Text>
                 </div>
             ))}
-            {producers.length === 0 && (
+            {drafts.length === 0 && (
                 <Text size={200} className={styles.empty}>No producers available</Text>
             )}
         </div>

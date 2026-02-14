@@ -69,7 +69,7 @@ export function generateDsl(
             var: d.variableName,
             kind: "producerDraft",
             producer: {
-                call: `DataProducer.${d.entityName}.Draft`,
+                call: `DataProducer.${d.entityName}.${d.draftId}`,
                 with: d.withMutations,
             },
             build: d.build,

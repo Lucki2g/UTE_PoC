@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import {
     Text,
     Button,
@@ -21,11 +21,13 @@ import {
     DismissCircleFilled,
     CircleRegular,
     DocumentFlowchartRegular,
+    BeakerEditRegular,
 } from "@fluentui/react-icons";
 import { useTests } from "../hooks/useTests.ts";
 import { useBuilderContext } from "../contexts/BuilderContext.tsx";
 import { loadDslToDiagram } from "../util/dslLoader.ts";
 import type { TestMetadata, TestRunResult } from "../models/responses.ts";
+import { UnsavedChangesDialog } from "./UnsavedChangesDialog.tsx";
 
 // ─── Tree node structure ─────────────────────────────────────────────────────
 
@@ -228,9 +230,9 @@ function getAggregateStatus(
 function ResultIcon({ status }: { status: AggregateStatus }) {
     switch (status) {
         case "running": return <Spinner size="extra-tiny" />;
-        case "passed":  return <CheckmarkCircleFilled fontSize={16} color={tokens.colorPaletteGreenForeground1} />;
-        case "failed":  return <DismissCircleFilled fontSize={16} color={tokens.colorPaletteRedForeground1} />;
-        default:        return <CircleRegular fontSize={16} />;
+        case "passed": return <CheckmarkCircleFilled fontSize={16} color={tokens.colorPaletteGreenForeground1} />;
+        case "failed": return <DismissCircleFilled fontSize={16} color={tokens.colorPaletteRedForeground1} />;
+        default: return <CircleRegular fontSize={16} />;
     }
 }
 
@@ -311,7 +313,7 @@ function TestTreeItem({
                             <Button
                                 appearance="subtle"
                                 size="small"
-                                icon={<DocumentFlowchartRegular className={styles.openIcon} />}
+                                icon={<BeakerEditRegular className={styles.openIcon} />}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onOpen(node.test!);
@@ -429,16 +431,16 @@ function ResultsPanel({
 
 export function TestExplorer() {
     const tests = useTests();
-    const { dispatch: builderDispatch } = useBuilderContext();
+    const { state: builderState, dispatch: builderDispatch } = useBuilderContext();
     const styles = useStyles();
     const [search, setSearch] = useState("");
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
+    const [unsavedWarningOpen, setUnsavedWarningOpen] = useState(false);
+    const pendingTestRef = useRef<TestMetadata | null>(null);
 
     useEffect(() => {
         tests.fetchAll();
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    console.log(tests.tests)
 
     const tree = useMemo(() => buildTree(tests.tests), [tests.tests]);
     const filtered = useMemo(() => filterTree(tree, search), [tree, search]);
@@ -456,12 +458,34 @@ export function TestExplorer() {
         tests.run({ testName });
     };
 
-    const handleOpenTest = useCallback((test: TestMetadata) => {
+    const openTestDiagram = useCallback((test: TestMetadata) => {
         if (test.dsl) {
             const diagram = loadDslToDiagram(test.dsl, test.className);
             builderDispatch({ type: "SET_DIAGRAM", payload: diagram });
         }
     }, [builderDispatch]);
+
+    const handleOpenTest = useCallback((test: TestMetadata) => {
+        if (builderState.dirty) {
+            pendingTestRef.current = test;
+            setUnsavedWarningOpen(true);
+        } else {
+            openTestDiagram(test);
+        }
+    }, [builderState.dirty, openTestDiagram]);
+
+    const handleConfirmDiscard = useCallback(() => {
+        setUnsavedWarningOpen(false);
+        if (pendingTestRef.current) {
+            openTestDiagram(pendingTestRef.current);
+            pendingTestRef.current = null;
+        }
+    }, [openTestDiagram]);
+
+    const handleCancelDiscard = useCallback(() => {
+        setUnsavedWarningOpen(false);
+        pendingTestRef.current = null;
+    }, []);
 
     const handleSearchChange: SearchBoxProps["onChange"] = (_ev, data) => {
         setSearch(data.value);
@@ -540,6 +564,14 @@ export function TestExplorer() {
                     tree={tree}
                 />
             )}
+
+            <UnsavedChangesDialog
+                open={unsavedWarningOpen}
+                onDiscard={handleConfirmDiscard}
+                onCancel={handleCancelDiscard}
+                message="You have unsaved changes in the current test case. Loading another test will discard them."
+                discardLabel="Discard & Open"
+            />
         </div>
     );
 }

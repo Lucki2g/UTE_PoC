@@ -32,11 +32,13 @@ export function loadDslToDiagram(
 
     // Arrange → producer nodes
     for (const binding of dsl.test.arrange.bindings) {
-        const entityMatch = binding.producer.call.match(/DataProducer\.(\w+)\.Draft/);
-        const entityName = entityMatch ? entityMatch[1] : "Unknown";
+        const callParts = binding.producer.call.split(".");
+        const entityName = callParts.length >= 2 ? callParts[1] : "Unknown";
+        const draftId = callParts.length >= 3 ? callParts[2] : binding.id;
 
         const nodeData: ProducerNodeData = {
             nodeType: "producer",
+            draftId,
             entityName,
             variableName: binding.var,
             build: binding.build,

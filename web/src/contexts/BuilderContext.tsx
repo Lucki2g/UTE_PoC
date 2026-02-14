@@ -19,9 +19,9 @@ function builderReducer(state: DiagramState, action: BuilderAction): DiagramStat
         case "SET_DIAGRAM":
             return action.payload;
         case "SET_NODES":
-            return { ...state, nodes: action.payload, dirty: true };
+            return { ...state, nodes: action.payload };
         case "SET_EDGES":
-            return { ...state, edges: action.payload, dirty: true };
+            return { ...state, edges: action.payload };
         case "ADD_NODE":
             return { ...state, nodes: [...state.nodes, action.payload], dirty: true };
         case "UPDATE_NODE":

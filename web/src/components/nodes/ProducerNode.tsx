@@ -9,6 +9,7 @@ import {
 import type { BuilderNode, ProducerNodeData } from "../../models/builder.ts";
 import { useBuilderContext } from "../../contexts/BuilderContext.tsx";
 import dataproducerIcon from "../../assets/dataproducer-icon.svg";
+import { WithRow } from "../withs/WithRow.tsx";
 
 const useStyles = makeStyles({
     node: {
@@ -48,17 +49,16 @@ const useStyles = makeStyles({
         alignItems: "center",
         gap: tokens.spacingHorizontalXS,
     },
+    footer: {
+        borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    },
     section: {
         borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
         paddingTop: tokens.spacingVerticalXS,
         marginTop: tokens.spacingVerticalXXS,
-    },
-    withRow: {
         display: "flex",
-        alignItems: "center",
-        gap: tokens.spacingHorizontalXXS,
-        fontSize: tokens.fontSizeBase100,
-        padding: `${tokens.spacingVerticalXXS} 0`,
+        flexDirection: "column",
+        gap: tokens.spacingVerticalXS,
     },
 });
 
@@ -75,6 +75,7 @@ export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
             </div>
 
             <div className={styles.body}>
+                {/* FIELDS */}
                 <div className={styles.field}>
                     <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Variable</Text>
                     <Input
@@ -90,34 +91,30 @@ export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
                     />
                 </div>
 
-                <div className={styles.field}>
-                    <Switch
-                        label="Build"
-                        checked={nodeData.build}
-                        onChange={(_ev, data) =>
-                            dispatch({
-                                type: "UPDATE_NODE",
-                                payload: { id, data: { build: data.checked } },
-                            })
-                        }
-                        style={{ fontSize: tokens.fontSizeBase200 }}
-                    />
-                </div>
-
+                {/* WITHS */}
                 {nodeData.withMutations.length > 0 && (
                     <div className={styles.section}>
-                        <Text size={100} style={{ color: tokens.colorNeutralForeground3 }}>With</Text>
                         {nodeData.withMutations.map((m, i) => (
-                            <div key={i} className={styles.withRow}>
-                                <Text size={100} style={{ color: tokens.colorBrandForeground1 }}>{m.path}</Text>
-                                <Text size={100} style={{ color: tokens.colorNeutralForeground4 }}>=</Text>
-                                <Text size={100}>
-                                    {"value" in m.value ? String(m.value.value) : m.value.type}
-                                </Text>
-                            </div>
+                            <WithRow key={i} dsl={m} />
                         ))}
                     </div>
                 )}
+            </div>
+
+            {/* FOOTER */}
+            <div className={styles.footer}>
+                <Switch
+                    size="small"
+                    label="Build"
+                    checked={nodeData.build}
+                    onChange={(_ev, data) =>
+                        dispatch({
+                            type: "UPDATE_NODE",
+                            payload: { id, data: { build: data.checked } },
+                        })
+                    }
+                    style={{ fontSize: tokens.fontSizeBase200 }}
+                />
             </div>
 
             <Handle type="source" position={Position.Bottom} />

@@ -58,9 +58,10 @@ export function useTests() {
     }, [dispatch, handleError, fetchAll]);
 
     const run = useCallback(async (request: RunTestRequest) => {
-        dispatch({ type: "RUNNING" });
+        dispatch({ type: "RUNNING_TEST", payload: request.testName });
         try {
             const result = await testService.run(request);
+            if (!result.testName) result.testName = request.testName;
             dispatch({ type: "SET_RESULT", payload: result });
             return result;
         } catch (err) {
@@ -70,7 +71,10 @@ export function useTests() {
     }, [dispatch, handleError]);
 
     const runAll = useCallback(async () => {
-        dispatch({ type: "RUNNING" });
+        const allTestNames = state.tests.flatMap((t) =>
+            t.methodNames.map((m) => `${t.className}.${m}`)
+        );
+        dispatch({ type: "RUNNING_TESTS", payload: allTestNames });
         try {
             const result = await testService.runAll();
             dispatch({ type: "SET_ALL_RESULTS", payload: result.results });
@@ -79,7 +83,7 @@ export function useTests() {
             handleError(err);
             return undefined;
         }
-    }, [dispatch, handleError]);
+    }, [dispatch, handleError, state.tests]);
 
     return {
         ...state,

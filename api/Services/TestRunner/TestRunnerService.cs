@@ -45,7 +45,9 @@ public class TestRunnerService : ITestRunnerService
                 .WithValidation(CommandResultValidation.None)
                 .ExecuteBufferedAsync();
 
-            return ParseTrxResult(resultsFile, result.StandardOutput + result.StandardError);
+            var parsed = ParseTrxResult(resultsFile, result.StandardOutput + result.StandardError);
+            parsed.TestName = testName;
+            return parsed;
         }
         catch (Exception e)
         {

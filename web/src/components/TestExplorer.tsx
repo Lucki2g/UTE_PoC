@@ -19,8 +19,7 @@ import {
     CheckmarkCircleFilled,
     DismissCircleFilled,
     CircleRegular,
-    ChevronRightRegular,
-    ChevronDownRegular,
+    DocumentFlowchartRegular,
 } from "@fluentui/react-icons";
 import { useTests } from "../hooks/useTests.ts";
 import { useBuilderContext } from "../contexts/BuilderContext.tsx";
@@ -132,11 +131,53 @@ const useStyles = makeStyles({
         padding: tokens.spacingHorizontalM,
         textAlign: "center" as const,
     },
+    playIcon: {
+        color: tokens.colorPaletteGreenBackground3,
+    },
+    openIcon: {
+        color: tokens.colorNeutralForeground2,
+    },
+    actionButtons: {
+        display: "flex",
+        marginLeft: "auto",
+        gap: "2px",
+    },
+    results: {
+        borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+        padding: tokens.spacingHorizontalS,
+        minHeight: "80px",
+        maxHeight: "200px",
+        overflowY: "auto",
+    },
+    resultHeader: {
+        fontWeight: tokens.fontWeightSemibold,
+        marginBottom: tokens.spacingVerticalXS,
+    },
+    resultSummary: {
+        display: "flex",
+        gap: tokens.spacingHorizontalM,
+        marginBottom: tokens.spacingVerticalXS,
+    },
+    resultMessage: {
+        marginTop: tokens.spacingVerticalXS,
+        fontSize: tokens.fontSizeBase200,
+        color: tokens.colorPaletteRedForeground1,
+    },
+    resultTrace: {
+        marginTop: tokens.spacingVerticalXS,
+        fontSize: tokens.fontSizeBase100,
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-all",
+        color: tokens.colorNeutralForeground3,
+        maxHeight: "100px",
+        overflowY: "auto",
+    },
 });
 
 // ─── Result icon ─────────────────────────────────────────────────────────────
 
-function ResultIcon({ result }: { result?: TestRunResult }) {
+function ResultIcon({ result, running }: { result?: TestRunResult; running?: boolean }) {
+    if (running) return <Spinner size="extra-tiny" />;
     if (!result) return <CircleRegular fontSize={16} />;
     if (result.passed) return <CheckmarkCircleFilled fontSize={16} color={tokens.colorPaletteGreenForeground1} />;
     return <DismissCircleFilled fontSize={16} color={tokens.colorPaletteRedForeground1} />;
@@ -147,6 +188,7 @@ function ResultIcon({ result }: { result?: TestRunResult }) {
 function TestTreeItem({
     node,
     results,
+    runningTests,
     expanded,
     selected,
     onToggle,
@@ -156,6 +198,7 @@ function TestTreeItem({
 }: {
     node: TestTreeNode;
     results: Map<string, TestRunResult>;
+    runningTests: Set<string>;
     expanded: Set<string>;
     selected: string | null;
     onToggle: (path: string) => void;
@@ -166,14 +209,10 @@ function TestTreeItem({
     const styles = useStyles();
     const isExpanded = expanded.has(node.fullPath);
     const hasChildren = node.children.length > 0;
-    const result = node.method ? results.get(node.fullPath) : undefined;
+    const isMethod = !!node.method;
+    const result = isMethod ? results.get(node.fullPath) : undefined;
+    const isRunning = isMethod && runningTests.has(node.fullPath);
     const isSelected = selected === node.fullPath;
-
-    const expandIcon = hasChildren
-        ? isExpanded
-            ? <ChevronDownRegular fontSize={12} />
-            : <ChevronRightRegular fontSize={12} />
-        : undefined;
 
     return (
         <TreeItem
@@ -182,8 +221,7 @@ function TestTreeItem({
             value={node.fullPath}
         >
             <TreeItemLayout
-                iconBefore={expandIcon}
-                iconAfter={<ResultIcon result={result} />}
+                iconBefore={<ResultIcon result={result} running={isRunning} />}
                 onClick={() => {
                     if (hasChildren) onToggle(node.fullPath);
                     onSelect(node.fullPath);
@@ -198,17 +236,47 @@ function TestTreeItem({
                 style={{
                     backgroundColor: isSelected ? tokens.colorNeutralBackground1Selected : undefined,
                     borderRadius: tokens.borderRadiusMedium,
+                    display: "flex",
+                    alignItems: "center",
+                    width: "100%",
+                    gap: "4px",
                 }}
             >
-                <Text size={200} title={node.fullPath}>{node.label}</Text>
-            </TreeItemLayout>
-
-            {result && !result.passed && isSelected && (
-                <div className={styles.errorDetail}>
-                    {result.errorMessage}
-                    {result.trace && <pre className={styles.errorTrace}>{result.trace}</pre>}
+                <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    width: "100%",
+                }}>
+                    <Text size={200} title={node.fullPath}>{node.label}{hasChildren ? ` [${node.children.length}]` : ""}</Text>
+                    <div className={styles.actionButtons}>
+                        {isMethod && node.test && (
+                            <Button
+                                appearance="subtle"
+                                size="small"
+                                icon={<PlayFilled className={styles.playIcon} />}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRun(`${node.test!.className}.${node.method!}`);
+                                }}
+                                disabled={isRunning}
+                                title="Run test"
+                            />
+                        )}
+                        {isMethod && node.test && (
+                            <Button
+                                appearance="subtle"
+                                size="small"
+                                icon={<DocumentFlowchartRegular className={styles.openIcon} />}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpen(node.test!);
+                                }}
+                                title="Open in builder"
+                            />
+                        )}
+                    </div>
                 </div>
-            )}
+            </TreeItemLayout>
 
             {hasChildren && isExpanded && (
                 <Tree>
@@ -217,6 +285,7 @@ function TestTreeItem({
                             key={child.fullPath}
                             node={child}
                             results={results}
+                            runningTests={runningTests}
                             expanded={expanded}
                             selected={selected}
                             onToggle={onToggle}
@@ -228,6 +297,86 @@ function TestTreeItem({
                 </Tree>
             )}
         </TreeItem>
+    );
+}
+
+// ─── Tree lookup helpers ─────────────────────────────────────────────────────
+
+function findNode(nodes: TestTreeNode[], path: string): TestTreeNode | undefined {
+    for (const node of nodes) {
+        if (node.fullPath === path) return node;
+        const found = findNode(node.children, path);
+        if (found) return found;
+    }
+    return undefined;
+}
+
+function collectMethodPaths(node: TestTreeNode): string[] {
+    if (node.method) return [node.fullPath];
+    return node.children.flatMap(collectMethodPaths);
+}
+
+// ─── Results Panel ───────────────────────────────────────────────────────────
+
+function ResultsPanel({
+    selectedPath,
+    results,
+    tree,
+}: {
+    selectedPath: string;
+    results: Map<string, TestRunResult>;
+    tree: TestTreeNode[];
+}) {
+    const styles = useStyles();
+    const node = findNode(tree, selectedPath);
+    if (!node) return null;
+
+    // Single method selected — show its detail
+    if (node.method) {
+        const result = results.get(node.fullPath);
+        if (!result) return null;
+        return (
+            <div className={styles.results}>
+                <Text size={300} className={styles.resultHeader}>
+                    {result.passed ? <CheckmarkCircleFilled color={tokens.colorPaletteGreenForeground1} /> : <DismissCircleFilled color={tokens.colorPaletteRedForeground1} />}
+                    {" "}{node.label} — {result.duration}
+                </Text>
+                {!result.passed && result.errorMessage && (
+                    <div className={styles.resultMessage}>{result.errorMessage}</div>
+                )}
+                {!result.passed && result.trace && (
+                    <pre className={styles.resultTrace}>{result.trace}</pre>
+                )}
+            </div>
+        );
+    }
+
+    // Branch selected — show summary of children
+    const methodPaths = collectMethodPaths(node);
+    const childResults = methodPaths.map((p) => results.get(p)).filter(Boolean) as TestRunResult[];
+    if (childResults.length === 0) return null;
+
+    const passed = childResults.filter((r) => r.passed).length;
+    const failed = childResults.filter((r) => !r.passed).length;
+    const notRun = methodPaths.length - childResults.length;
+
+    return (
+        <div className={styles.results}>
+            <Text size={300} className={styles.resultHeader}>{node.label}</Text>
+            <div className={styles.resultSummary}>
+                <Text size={200}>
+                    <CheckmarkCircleFilled color={tokens.colorPaletteGreenForeground1} /> {passed} passed
+                </Text>
+                <Text size={200}>
+                    <DismissCircleFilled color={tokens.colorPaletteRedForeground1} /> {failed} failed
+                </Text>
+                {notRun > 0 && (
+                    <Text size={200}>
+                        <CircleRegular /> {notRun} not run
+                    </Text>
+                )}
+            </div>
+        </div>
     );
 }
 
@@ -273,31 +422,29 @@ export function TestExplorer() {
 
     return (
         <div className={styles.pane}>
+
+            {/* HEADER*/}
             <div className={styles.header}>
-                <Text weight="semibold" size={200}>Test Explorer</Text>
-                <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "4px" }}>
-                    {tests.running && <Spinner size="tiny" />}
-                    <Button
-                        appearance="primary"
+                <div className={styles.searchWrap}>
+                    <SearchBox
+                        placeholder="Search tests..."
+                        value={search}
+                        onChange={handleSearchChange}
                         size="small"
-                        icon={<PlayFilled />}
+                    />
+                </div>
+                <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "4px" }}>
+                    {tests.runningTests.size > 0 && <Spinner size="tiny" />}
+                    <Button
+                        size="small"
+                        icon={<PlayFilled className={styles.playIcon} />}
                         onClick={() => tests.runAll()}
                         disabled={tests.running}
-                    >
-                        Run All
-                    </Button>
+                    />
                 </div>
             </div>
 
-            <div className={styles.searchWrap}>
-                <SearchBox
-                    placeholder="Search tests..."
-                    value={search}
-                    onChange={handleSearchChange}
-                    size="small"
-                />
-            </div>
-
+            {/* ERROR MESSAGE */}
             {tests.error && (
                 <MessageBar intent="error">
                     <MessageBarBody>{tests.error}</MessageBarBody>
@@ -309,6 +456,7 @@ export function TestExplorer() {
                 </MessageBar>
             )}
 
+            {/* TEST CASES */}
             <div className={styles.content}>
                 {tests.loading ? (
                     <Spinner size="small" label="Loading tests..." />
@@ -319,6 +467,7 @@ export function TestExplorer() {
                                 key={node.fullPath}
                                 node={node}
                                 results={tests.results}
+                                runningTests={tests.runningTests}
                                 expanded={expanded}
                                 selected={tests.selectedTest}
                                 onToggle={toggleExpand}
@@ -335,6 +484,15 @@ export function TestExplorer() {
                     </Tree>
                 )}
             </div>
+
+            {/* RESULTS DETAIL PANEL */}
+            {tests.selectedTest && (
+                <ResultsPanel
+                    selectedPath={tests.selectedTest}
+                    results={tests.results}
+                    tree={tree}
+                />
+            )}
         </div>
     );
 }

@@ -67,11 +67,13 @@ export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
     const { dispatch } = useBuilderContext();
     const styles = useStyles();
 
+    console.log(nodeData)
+
     return (
         <div className={`${styles.node} ${selected ? styles.selected : ""}`}>
             <div className={styles.header}>
                 <img src={dataproducerIcon} alt="" className={styles.icon} />
-                <Text size={200} weight="semibold">{nodeData.draftId ?? nodeData.entityName}</Text>
+                <Text size={200} weight="semibold">{nodeData.draftId} ({nodeData.entityName})</Text>
             </div>
 
             <div className={styles.body}>
@@ -95,7 +97,19 @@ export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
                 {nodeData.withMutations.length > 0 && (
                     <div className={styles.section}>
                         {nodeData.withMutations.map((m, i) => (
-                            <WithRow key={i} dsl={m} />
+                            <WithRow
+                                key={i}
+                                dsl={m}
+                                entityName={nodeData.entityName}
+                                onPathChange={(path) => {
+                                    const updated = [...nodeData.withMutations];
+                                    updated[i] = { ...m, path };
+                                    dispatch({
+                                        type: "UPDATE_NODE",
+                                        payload: { id, data: { withMutations: updated } },
+                                    });
+                                }}
+                            />
                         ))}
                     </div>
                 )}

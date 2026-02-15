@@ -14,9 +14,9 @@ public class DslCompilerService : IDslCompilerService
         return Task.FromResult(result);
     }
 
-    public Task<DslDecompileResult> DecompileFromCSharpAsync(string csharpCode)
+    public Task<DslDecompileResult> DecompileFromCSharpAsync(string csharpCode, IReadOnlyDictionary<string, string>? producerEntityMap = null)
     {
-        var decompiler = new CSharpToDslDecompiler();
+        var decompiler = new CSharpToDslDecompiler(producerEntityMap);
         var result = decompiler.Decompile(csharpCode);
         return Task.FromResult(result);
     }

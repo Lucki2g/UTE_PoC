@@ -4,3 +4,5 @@ export { testService } from "./testService.ts";
 export { producerService } from "./producerService.ts";
 export { extensionService } from "./extensionService.ts";
 export { metadataService } from "./metadataService.ts";
+export { entitySchemaService } from "./entitySchemaService.ts";
+export type { EntityColumnInfo } from "./entitySchemaService.ts";

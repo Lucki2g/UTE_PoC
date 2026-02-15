@@ -181,7 +181,8 @@ internal class DslToCSharpCompiler
 
     private void EmitBinding(StringBuilder sb, DslBinding binding, string indent)
     {
-        var producerCall = binding.Producer.Call;
+        // Convert 3-part DSL format "DataProducer.Skill.DraftValidSkill" to C# "Producer.DraftValidSkill"
+        var producerCall = ToCSharpProducerCall(binding.Producer.Call);
         var hasWith = binding.Producer.With.Count > 0;
         var hasBuild = binding.Build;
 
@@ -473,16 +474,28 @@ internal class DslToCSharpCompiler
 
     // --- Helpers ---
 
+    private static string ToCSharpProducerCall(string dslCall)
+    {
+        // Convert 3-part DSL format "DataProducer.Skill.DraftValidSkill" to C# "Producer.DraftValidSkill"
+        var parts = dslCall.Split('.');
+        if (parts.Length == 3)
+            return $"Producer.{parts[2]}";
+
+        // Already in 2-part format or unknown — return as-is
+        return dslCall;
+    }
+
     private static string DeriveLambdaParam(string producerCall)
     {
         // Extract entity name from "Producer.DraftValidAccount" -> "Account" -> "a"
         var parts = producerCall.Split('.');
         var methodName = parts.Length > 1 ? parts[^1] : producerCall;
 
-        // Try to find entity name after "DraftValid" or "Draft"
         var entityName = methodName;
         if (methodName.StartsWith("DraftValid", StringComparison.Ordinal))
             entityName = methodName["DraftValid".Length..];
+        else if (methodName.StartsWith("DraftInvalid", StringComparison.Ordinal))
+            entityName = methodName["DraftInvalid".Length..];
         else if (methodName.StartsWith("Draft", StringComparison.Ordinal))
             entityName = methodName["Draft".Length..];
 

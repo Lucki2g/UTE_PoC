@@ -8,16 +8,19 @@ public class TestService : ITestService
     private readonly string _testProjectPath;
     private readonly IDslCompilerService _dslCompiler;
     private readonly IFileManagerService _fileManager;
+    private readonly IDataProducerService _dataProducerService;
 
-    public TestService(TestProjectPaths paths, IDslCompilerService dslCompiler, IFileManagerService fileManager)
+    public TestService(TestProjectPaths paths, IDslCompilerService dslCompiler, IFileManagerService fileManager, IDataProducerService dataProducerService)
     {
         _testProjectPath = paths.TestProjectPath;
         _dslCompiler = dslCompiler;
         _fileManager = fileManager;
+        _dataProducerService = dataProducerService;
     }
 
     public async Task<IEnumerable<TestMetadata>> GetAllTestsAsync()
     {
+        var producerEntityMap = await BuildProducerEntityMapAsync();
         var csFiles = _fileManager.GetFiles(_testProjectPath, "*.cs");
         var results = new List<TestMetadata>();
 
@@ -27,7 +30,7 @@ public class TestService : ITestService
             if (!ContainsTestAttribute(code))
                 continue;
 
-            var decompileResult = await _dslCompiler.DecompileFromCSharpAsync(code);
+            var decompileResult = await _dslCompiler.DecompileFromCSharpAsync(code, producerEntityMap);
             var methodNames = ExtractTestMethodNames(code);
 
             results.Add(new TestMetadata
@@ -166,5 +169,21 @@ public class TestService : ITestService
         var parts = testName.Split('_');
         var baseName = parts[0];
         return baseName.EndsWith("Tests", StringComparison.Ordinal) ? baseName : baseName + "Tests";
+    }
+
+    private async Task<Dictionary<string, string>> BuildProducerEntityMapAsync()
+    {
+        var producers = await _dataProducerService.GetAllProducersAsync();
+        var map = new Dictionary<string, string>();
+
+        foreach (var producer in producers)
+        {
+            foreach (var draft in producer.Dsl.Drafts)
+            {
+                map[draft.Id] = draft.Entity.LogicalName;
+            }
+        }
+
+        return map;
     }
 }

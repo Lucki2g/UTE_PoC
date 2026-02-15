@@ -66,6 +66,7 @@ builder.Services.AddSingleton<IProducerDslCompilerService, ProducerDslCompilerSe
 builder.Services.AddSingleton<IDataProducerService, DataProducerService>();
 builder.Services.AddSingleton<IDataExtensionsService, DataExtensionsService>();
 builder.Services.AddSingleton<IFileManagerService, FileManagerService>();
+builder.Services.AddSingleton<IEntitySchemaService, EntitySchemaService>();
 
 var app = builder.Build();
 
@@ -89,5 +90,6 @@ app.MapMetadataEndpoints();
 app.MapTestEndpoints();
 app.MapDataProducerEndpoints();
 app.MapDataExtensionsEndpoints();
+app.MapEntitySchemaEndpoints();
 
 app.Run();

@@ -8,6 +8,13 @@ namespace TestEngine.Services;
 internal class CSharpToDslDecompiler
 {
     private readonly List<DslDiagnostic> _diagnostics = [];
+    private readonly IReadOnlyDictionary<string, string> _producerEntityMap;
+
+    /// <param name="producerEntityMap">Maps draft method names (e.g. "DraftValidSkill") to entity logical names (e.g. "ape_skill").</param>
+    public CSharpToDslDecompiler(IReadOnlyDictionary<string, string>? producerEntityMap = null)
+    {
+        _producerEntityMap = producerEntityMap ?? new Dictionary<string, string>();
+    }
 
     public DslDecompileResult Decompile(string csharpCode)
     {
@@ -372,6 +379,14 @@ internal class CSharpToDslDecompiler
 
         if (producerCall == null) return null;
 
+        // Resolve entity type from the producer entity map using the draft method name
+        var callParts = producerCall.Split('.');
+        var draftMethod = callParts.Length > 1 ? callParts[^1] : producerCall;
+        var entityType = _producerEntityMap.TryGetValue(draftMethod, out var mapped) ? mapped : "Unknown";
+
+        // Emit 3-part format: DataProducer.{EntityType}.{DraftMethod}
+        var normalizedCall = $"DataProducer.{entityType}.{draftMethod}";
+
         return new DslBinding
         {
             Id = varName,
@@ -379,7 +394,7 @@ internal class CSharpToDslDecompiler
             Kind = "producerDraft",
             Producer = new DslProducerCall
             {
-                Call = producerCall,
+                Call = normalizedCall,
                 With = withMutations
             },
             Build = hasBuild

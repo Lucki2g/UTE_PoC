@@ -90,7 +90,7 @@ export function loadDslToDiagram(
     for (let i = 0; i < dsl.test.assert.retrievals.length; i++) {
         const r = dsl.test.assert.retrievals[i];
         const retId = `ret_${i}_${Date.now()}`;
-        const operation = r.kind === "retrieveMultiple" ? "RetrieveList" as const : "RetrieveSingle" as const;
+        const operation = r.kind === "retrieveList" || r.kind === "retrieveMultiple" ? "RetrieveList" as const : "RetrieveSingle" as const;
 
         const whereEntries = r.where
             ? r.where.items

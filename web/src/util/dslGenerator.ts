@@ -107,7 +107,7 @@ export function generateDsl(
     // Assert retrievals from retrieve service nodes
     const retrievals: DslRetrieval[] = retrieveServiceNodes.map((node) => {
         const d = node.data as ServiceNodeData;
-        const kind = d.operation === "RetrieveList" ? "retrieveMultiple" : "retrieveFirstOrDefault";
+        const kind = d.operation === "RetrieveList" ? "retrieveList" : "retrieveFirstOrDefault";
         return {
             var: d.resultVar ?? "result",
             kind,

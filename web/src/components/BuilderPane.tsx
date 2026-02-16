@@ -40,9 +40,9 @@ import "@xyflow/react/dist/style.css";
 import { useBuilderContext } from "../contexts/BuilderContext.tsx";
 import { useTests } from "../hooks/useTests.ts";
 import { generateDsl } from "../util/dslGenerator.ts";
-import { ProducerNode } from "./nodes/ProducerNode.tsx";
-import { ServiceNode } from "./nodes/ServiceNode.tsx";
-import { AssertNode } from "./nodes/AssertNode.tsx";
+import { ProducerNode } from "./nodes/producer/ProducerNode.tsx";
+import { ServiceNode } from "./nodes/dao/ServiceNode.tsx";
+import { AssertNode } from "./nodes/assert/AssertNode.tsx";
 import type {
     ProducerNodeData,
     ServiceNodeData,
@@ -161,6 +161,7 @@ export function BuilderPane() {
                         entityName: producer.entityName,
                         variableName: producer.entityName.toLowerCase(),
                         build: false,
+                        anonymous: false,
                         withMutations: [],
                     };
                     node = {

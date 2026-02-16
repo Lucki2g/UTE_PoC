@@ -161,7 +161,7 @@ export interface DslRetrieval {
     kind: string;
     entitySet: string;
     alias: string;
-    where: DslWhereExpression;
+    where: DslWhereExpression | null;
     select?: unknown;
 }
 

@@ -201,7 +201,7 @@ public class DslRetrieval
     public required string Alias { get; set; }
 
     [JsonPropertyName("where")]
-    public required DslWhereExpression Where { get; set; }
+    public DslWhereExpression? Where { get; set; }
 
     [JsonPropertyName("select")]
     public object? Select { get; set; }

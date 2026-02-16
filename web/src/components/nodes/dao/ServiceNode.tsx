@@ -7,9 +7,9 @@ import {
     makeStyles,
     tokens,
 } from "@fluentui/react-components";
-import type { BuilderNode, ServiceNodeData } from "../../models/builder.ts";
-import { useBuilderContext } from "../../contexts/BuilderContext.tsx";
-import dataverseserviceIcon from "../../assets/dataverseservice-icon.svg";
+import type { BuilderNode, ServiceNodeData } from "../../../models/builder.ts";
+import { useBuilderContext } from "../../../contexts/BuilderContext.tsx";
+import dataverseserviceIcon from "../../../assets/dataverseservice-icon.svg";
 
 const operations = ["Create", "Update", "RetrieveSingle", "RetrieveList", "Delete"] as const;
 
@@ -67,8 +67,12 @@ const useStyles = makeStyles({
 
 export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
     const nodeData = data as ServiceNodeData;
+    console.log(nodeData);
     const { dispatch } = useBuilderContext();
     const styles = useStyles();
+
+    const isRetrieve = nodeData.operation === "RetrieveList"
+        || nodeData.operation === "RetrieveSingle";
 
     return (
         <div className={`${styles.node} ${selected ? styles.selected : ""}`}>
@@ -77,6 +81,7 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
                 <Text size={200} weight="semibold">DataverseService</Text>
             </div>
 
+            {/* OPERATION */}
             <div className={styles.body}>
                 <div className={styles.field}>
                     <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Operation</Text>
@@ -101,23 +106,60 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
                     </Dropdown>
                 </div>
 
-                <div className={styles.field}>
-                    <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Target</Text>
-                    <Input
-                        size="small"
-                        value={nodeData.targetBinding ?? ""}
-                        placeholder="binding id"
-                        onChange={(_ev, data) =>
-                            dispatch({
-                                type: "UPDATE_NODE",
-                                payload: { id, data: { targetBinding: data.value } },
-                            })
-                        }
-                        style={{ flex: 1 }}
-                    />
-                </div>
+                {!isRetrieve && (
+                    <div className={styles.field}>
+                        <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Target</Text>
+                        <Input
+                            size="small"
+                            value={nodeData.targetBinding ?? ""}
+                            placeholder="binding id"
+                            onChange={(_ev, data) =>
+                                dispatch({
+                                    type: "UPDATE_NODE",
+                                    payload: { id, data: { targetBinding: data.value } },
+                                })
+                            }
+                            style={{ flex: 1 }}
+                        />
+                    </div>
+                )}
 
-                {nodeData.operation === "RetrieveList" && nodeData.whereExpressions.length > 0 && (
+                {isRetrieve && (
+                    <>
+                        <div className={styles.field}>
+                            <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Variable</Text>
+                            <Input
+                                size="small"
+                                value={nodeData.resultVar ?? ""}
+                                placeholder="result variable"
+                                onChange={(_ev, data) =>
+                                    dispatch({
+                                        type: "UPDATE_NODE",
+                                        payload: { id, data: { resultVar: data.value } },
+                                    })
+                                }
+                                style={{ flex: 1 }}
+                            />
+                        </div>
+                        <div className={styles.field}>
+                            <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Entity Set</Text>
+                            <Input
+                                size="small"
+                                value={nodeData.entitySet ?? ""}
+                                placeholder="e.g. ape_skillSet"
+                                onChange={(_ev, data) =>
+                                    dispatch({
+                                        type: "UPDATE_NODE",
+                                        payload: { id, data: { entitySet: data.value } },
+                                    })
+                                }
+                                style={{ flex: 1 }}
+                            />
+                        </div>
+                    </>
+                )}
+
+                {isRetrieve && nodeData.whereExpressions.length > 0 && (
                     <div className={styles.section}>
                         <Text size={100} style={{ color: tokens.colorNeutralForeground3 }}>Where</Text>
                         {nodeData.whereExpressions.map((w, i) => (

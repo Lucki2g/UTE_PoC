@@ -7,10 +7,10 @@ import {
     makeStyles,
     tokens,
 } from "@fluentui/react-components";
-import type { BuilderNode, ProducerNodeData } from "../../models/builder.ts";
-import { useBuilderContext } from "../../contexts/BuilderContext.tsx";
-import dataproducerIcon from "../../assets/dataproducer-icon.svg";
-import { WithRow } from "../withs/WithRow.tsx";
+import type { BuilderNode, ProducerNodeData } from "../../../models/builder.ts";
+import { useBuilderContext } from "../../../contexts/BuilderContext.tsx";
+import dataproducerIcon from "../../../assets/dataproducer-icon.svg";
+import { WithRow } from "./withs/WithRow.tsx";
 
 const useStyles = makeStyles({
     node: {
@@ -87,7 +87,10 @@ export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
         collectPredecessors(id);
 
         return state.nodes
-            .filter((n) => predecessorIds.has(n.id) && (n.data as ProducerNodeData).nodeType === "producer")
+            .filter((n) => {
+                const d = n.data as ProducerNodeData;
+                return predecessorIds.has(n.id) && d.nodeType === "producer" && !d.anonymous;
+            })
             .map((n) => n.data as ProducerNodeData);
     }, [id, state.nodes, state.edges]);
 
@@ -100,20 +103,26 @@ export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
 
             <div className={styles.body}>
                 {/* FIELDS */}
-                <div className={styles.field}>
-                    <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Variable</Text>
-                    <Input
-                        size="small"
-                        value={nodeData.variableName}
-                        onChange={(_ev, data) =>
-                            dispatch({
-                                type: "UPDATE_NODE",
-                                payload: { id, data: { variableName: data.value } },
-                            })
-                        }
-                        style={{ flex: 1 }}
-                    />
-                </div>
+                {nodeData.anonymous ? (
+                    <div className={styles.field}>
+                        <Text size={100} style={{ color: tokens.colorNeutralForeground4, fontStyle: "italic" }}>(anonymous)</Text>
+                    </div>
+                ) : (
+                    <div className={styles.field}>
+                        <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Variable</Text>
+                        <Input
+                            size="small"
+                            value={nodeData.variableName}
+                            onChange={(_ev, data) =>
+                                dispatch({
+                                    type: "UPDATE_NODE",
+                                    payload: { id, data: { variableName: data.value } },
+                                })
+                            }
+                            style={{ flex: 1 }}
+                        />
+                    </div>
+                )}
 
                 {/* WITHS */}
                 {nodeData.withMutations.length > 0 && (
@@ -148,18 +157,32 @@ export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
 
             {/* FOOTER */}
             <div className={styles.footer}>
-                <Switch
-                    size="small"
-                    label="Build"
-                    checked={nodeData.build}
-                    onChange={(_ev, data) =>
-                        dispatch({
-                            type: "UPDATE_NODE",
-                            payload: { id, data: { build: data.checked } },
-                        })
-                    }
-                    style={{ fontSize: tokens.fontSizeBase200 }}
-                />
+                <div style={{ display: "flex", gap: tokens.spacingHorizontalS }}>
+                    <Switch
+                        size="small"
+                        label="Build"
+                        checked={nodeData.build}
+                        onChange={(_ev, data) =>
+                            dispatch({
+                                type: "UPDATE_NODE",
+                                payload: { id, data: { build: data.checked } },
+                            })
+                        }
+                        style={{ fontSize: tokens.fontSizeBase200 }}
+                    />
+                    <Switch
+                        size="small"
+                        label="Anon"
+                        checked={nodeData.anonymous}
+                        onChange={(_ev, data) =>
+                            dispatch({
+                                type: "UPDATE_NODE",
+                                payload: { id, data: { anonymous: data.checked } },
+                            })
+                        }
+                        style={{ fontSize: tokens.fontSizeBase200 }}
+                    />
+                </div>
             </div>
 
             <Handle type="source" position={Position.Bottom} />

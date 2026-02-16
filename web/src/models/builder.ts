@@ -9,6 +9,7 @@ export interface ProducerNodeData {
     entityName: string;
     variableName: string;
     build: boolean;
+    anonymous: boolean;
     withMutations: DslWithMutation[];
     [key: string]: unknown;
 }
@@ -18,6 +19,7 @@ export interface ServiceNodeData {
     operation: "Create" | "Update" | "RetrieveSingle" | "RetrieveList" | "Delete";
     targetBinding?: string;
     resultVar?: string;
+    entitySet?: string;
     whereExpressions: WhereEntry[];
     [key: string]: unknown;
 }

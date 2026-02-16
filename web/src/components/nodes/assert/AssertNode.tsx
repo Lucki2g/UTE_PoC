@@ -1,15 +1,17 @@
+import { useMemo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import {
-    Input,
+    Combobox,
     Dropdown,
+    Input,
     Option,
     Text,
     makeStyles,
     tokens,
 } from "@fluentui/react-components";
-import type { BuilderNode, AssertNodeData } from "../../models/builder.ts";
-import { useBuilderContext } from "../../contexts/BuilderContext.tsx";
-import assertIcon from "../../assets/assert-icon.svg";
+import type { BuilderNode, AssertNodeData, ProducerNodeData, ServiceNodeData } from "../../../models/builder.ts";
+import { useBuilderContext } from "../../../contexts/BuilderContext.tsx";
+import assertIcon from "../../../assets/assert-icon.svg";
 
 const assertionKinds = ["notNull", "shouldBe", "throws", "containSingle"] as const;
 
@@ -55,8 +57,21 @@ const useStyles = makeStyles({
 
 export function AssertNode({ id, data, selected }: NodeProps<BuilderNode>) {
     const nodeData = data as AssertNodeData;
-    const { dispatch } = useBuilderContext();
+    const { state, dispatch } = useBuilderContext();
     const styles = useStyles();
+
+    const availableVars = useMemo(() => {
+        const vars: string[] = [];
+        for (const n of state.nodes) {
+            const d = n.data as ProducerNodeData | ServiceNodeData;
+            if (d.nodeType === "producer" && !d.anonymous && d.variableName) {
+                vars.push(d.variableName);
+            } else if (d.nodeType === "service" && (d.operation === "RetrieveList" || d.operation === "RetrieveSingle") && d.resultVar) {
+                vars.push(d.resultVar);
+            }
+        }
+        return vars;
+    }, [state.nodes]);
 
     return (
         <div className={`${styles.node} ${selected ? styles.selected : ""}`}>
@@ -66,6 +81,35 @@ export function AssertNode({ id, data, selected }: NodeProps<BuilderNode>) {
             </div>
 
             <div className={styles.body}>
+                {/* TARGET */}
+                <div className={styles.field}>
+                    <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Target</Text>
+                    <Combobox
+                        size="small"
+                        freeform
+                        value={nodeData.targetVar ?? ""}
+                        selectedOptions={nodeData.targetVar ? [nodeData.targetVar] : []}
+                        onOptionSelect={(_ev, data) =>
+                            dispatch({
+                                type: "UPDATE_NODE",
+                                payload: { id, data: { targetVar: data.optionText ?? data.optionValue } },
+                            })
+                        }
+                        onChange={(ev) =>
+                            dispatch({
+                                type: "UPDATE_NODE",
+                                payload: { id, data: { targetVar: ev.target.value } },
+                            })
+                        }
+                        style={{ flex: 1, minWidth: "120px" }}
+                    >
+                        {availableVars.map((v) => (
+                            <Option key={v} value={v}>{v}</Option>
+                        ))}
+                    </Combobox>
+                </div>
+
+                {/* TARGET */}
                 <div className={styles.field}>
                     <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Kind</Text>
                     <Dropdown
@@ -84,22 +128,6 @@ export function AssertNode({ id, data, selected }: NodeProps<BuilderNode>) {
                             <Option key={k} value={k}>{k}</Option>
                         ))}
                     </Dropdown>
-                </div>
-
-                <div className={styles.field}>
-                    <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Target</Text>
-                    <Input
-                        size="small"
-                        value={nodeData.targetVar ?? ""}
-                        placeholder="variable name"
-                        onChange={(_ev, data) =>
-                            dispatch({
-                                type: "UPDATE_NODE",
-                                payload: { id, data: { targetVar: data.value } },
-                            })
-                        }
-                        style={{ flex: 1 }}
-                    />
                 </div>
 
                 {(nodeData.assertionKind === "shouldBe" || nodeData.assertionKind === "containSingle") && (

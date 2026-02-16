@@ -1,5 +1,5 @@
 import { Combobox, makeStyles, Option } from "@fluentui/react-components";
-import type { EntityColumnInfo } from "../../../services";
+import type { EntityColumnInfo } from "../../../../../services";
 
 interface IChoiceProps {
     defaultValue?: string;

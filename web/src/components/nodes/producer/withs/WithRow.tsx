@@ -5,11 +5,11 @@ import {
     makeStyles,
     tokens,
 } from "@fluentui/react-components";
-import type { DslWithMutation, DslValueExpression } from "../../models";
-import type { ProducerNodeData } from "../../models/builder.ts";
-import type { EntityColumnInfo } from "../../services/entitySchemaService.ts";
-import { useEntityColumns } from "../../hooks/useEntityColumns.ts";
-import { ColumnLookup } from "../fields/ColumnLookup.tsx";
+import type { DslWithMutation, DslValueExpression } from "../../../../models/index.ts";
+import type { ProducerNodeData } from "../../../../models/builder.ts";
+import type { EntityColumnInfo } from "../../../../services/entitySchemaService.ts";
+import { useEntityColumns } from "../../../../hooks/useEntityColumns.ts";
+import { ColumnLookup } from "../../../fields/ColumnLookup.tsx";
 import { WithChoice } from "./withvalues/WithChoice.tsx";
 import { WithEntityRef } from "./withvalues/WithEntityRef.tsx";
 

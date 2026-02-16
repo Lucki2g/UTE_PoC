@@ -21,4 +21,11 @@
     <None Remove="data\**" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="TestEngine.Tests\**" />
+    <Content Remove="TestEngine.Tests\**" />
+    <EmbeddedResource Remove="TestEngine.Tests\**" />
+    <None Remove="TestEngine.Tests\**" />
+  </ItemGroup>
+
 </Project>

@@ -13,7 +13,12 @@
       "Bash(npm install:*)",
       "Bash(npm uninstall:*)",
       "Bash(node -e:*)",
-      "Bash(npx vite build:*)"
+      "Bash(npx vite build:*)",
+      "Bash(ls:*)",
+      "Bash(dotnet new:*)",
+      "Bash(dotnet sln:*)",
+      "Bash(dotnet add:*)",
+      "Bash(dotnet test:*)"
     ]
   }
 }

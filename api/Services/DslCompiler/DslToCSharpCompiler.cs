@@ -185,14 +185,22 @@ internal class DslToCSharpCompiler
         var producerCall = ToCSharpProducerCall(binding.Producer.Call);
         var hasWith = binding.Producer.With.Count > 0;
         var hasBuild = binding.Build;
+        var isAnonymous = binding.Id.StartsWith("_anon", StringComparison.Ordinal);
 
-        if (!hasWith && !hasBuild)
+        if (isAnonymous)
+        {
+            // Fire-and-forget: Producer.DraftValidSkill().Build(); (no var assignment)
+            sb.Append($"{indent}{producerCall}()");
+        }
+        else if (!hasWith && !hasBuild)
         {
             sb.AppendLine($"{indent}var {binding.Var} = {producerCall}();");
             return;
         }
-
-        sb.Append($"{indent}var {binding.Var} = {producerCall}()");
+        else
+        {
+            sb.Append($"{indent}var {binding.Var} = {producerCall}()");
+        }
 
         var lambdaParam = DeriveLambdaParam(producerCall);
 
@@ -334,12 +342,19 @@ internal class DslToCSharpCompiler
             _ => retrieval.Kind
         };
 
-        var whereExpr = CompileWhereExpression(retrieval.Where, retrieval.Alias);
         var awaitPrefix = test.Async ? "await " : "";
         var asyncSuffix = test.Async ? "Async" : "";
 
-        sb.AppendLine($"{indent}var {retrieval.Var} = {awaitPrefix}AdminDao.{method}{asyncSuffix}(");
-        sb.AppendLine($"{indent}    xrm => xrm.{retrieval.EntitySet}.Where({retrieval.Alias} => {whereExpr}));");
+        if (retrieval.Where != null)
+        {
+            var whereExpr = CompileWhereExpression(retrieval.Where, retrieval.Alias);
+            sb.AppendLine($"{indent}var {retrieval.Var} = {awaitPrefix}AdminDao.{method}{asyncSuffix}(");
+            sb.AppendLine($"{indent}    xrm => xrm.{retrieval.EntitySet}.Where({retrieval.Alias} => {whereExpr}));");
+        }
+        else
+        {
+            sb.AppendLine($"{indent}var {retrieval.Var} = {awaitPrefix}AdminDao.{method}{asyncSuffix}(xrm => xrm.{retrieval.EntitySet});");
+        }
     }
 
     private void EmitAssertion(StringBuilder sb, DslAssertion assertion, HashSet<string> notNullVars, string indent)

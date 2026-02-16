@@ -303,20 +303,33 @@ internal class CSharpToDslDecompiler
     private List<DslBinding> ParseArrangeBindings(List<StatementSyntax> statements)
     {
         var bindings = new List<DslBinding>();
+        var anonymousIndex = 0;
 
         foreach (var stmt in statements)
         {
-            if (stmt is not LocalDeclarationStatementSyntax localDecl) continue;
+            if (stmt is LocalDeclarationStatementSyntax localDecl)
+            {
+                var variable = localDecl.Declaration.Variables.FirstOrDefault();
+                if (variable?.Initializer?.Value == null) continue;
 
-            var variable = localDecl.Declaration.Variables.FirstOrDefault();
-            if (variable?.Initializer?.Value == null) continue;
+                var varName = variable.Identifier.Text;
+                var expr = variable.Initializer.Value;
 
-            var varName = variable.Identifier.Text;
-            var expr = variable.Initializer.Value;
-
-            var binding = TryParseProducerBinding(varName, expr);
-            if (binding != null)
-                bindings.Add(binding);
+                var binding = TryParseProducerBinding(varName, expr);
+                if (binding != null)
+                    bindings.Add(binding);
+            }
+            else if (stmt is ExpressionStatementSyntax exprStmt)
+            {
+                // Handle fire-and-forget producer calls: Producer.DraftValidSkill().Build();
+                var syntheticId = $"_anon{anonymousIndex}";
+                var binding = TryParseProducerBinding(syntheticId, exprStmt.Expression);
+                if (binding != null)
+                {
+                    anonymousIndex++;
+                    bindings.Add(binding);
+                }
+            }
         }
 
         return bindings;
@@ -691,45 +704,62 @@ internal class CSharpToDslDecompiler
 
         if (body == null) return null;
 
-        // Expect: xrm.AccountSet.Where(a => a.Id == createdAccountId)
-        if (body is not InvocationExpressionSyntax whereInvocation) return null;
-        if (whereInvocation.Expression is not MemberAccessExpressionSyntax whereAccess) return null;
-        if (whereAccess.Name.Identifier.Text != "Where") return null;
-
-        // Extract entity set: xrm.AccountSet
-        var entitySetExpr = whereAccess.Expression;
-        string? entitySet = null;
-
-        if (entitySetExpr is MemberAccessExpressionSyntax entitySetAccess)
-            entitySet = entitySetAccess.Name.Identifier.Text;
-
-        if (entitySet == null) return null;
-
-        // Extract Where predicate
-        if (whereInvocation.ArgumentList.Arguments.Count == 0) return null;
-
-        var whereArg = whereInvocation.ArgumentList.Arguments[0].Expression;
-        var (alias, whereExpr) = ParseWhereLambda(whereArg);
-
-        if (whereExpr == null)
+        // Case 1: xrm.AccountSet.Where(a => a.Id == createdAccountId) — with Where clause
+        if (body is InvocationExpressionSyntax whereInvocation &&
+            whereInvocation.Expression is MemberAccessExpressionSyntax whereAccess &&
+            whereAccess.Name.Identifier.Text == "Where")
         {
-            _diagnostics.Add(new DslDiagnostic
+            // Extract entity set: xrm.AccountSet
+            var entitySetExpr = whereAccess.Expression;
+            string? entitySet = null;
+
+            if (entitySetExpr is MemberAccessExpressionSyntax entitySetAccess)
+                entitySet = entitySetAccess.Name.Identifier.Text;
+
+            if (entitySet == null) return null;
+
+            // Extract Where predicate
+            if (whereInvocation.ArgumentList.Arguments.Count == 0) return null;
+
+            var whereArg = whereInvocation.ArgumentList.Arguments[0].Expression;
+            var (alias, whereExpr) = ParseWhereLambda(whereArg);
+
+            if (whereExpr == null)
             {
-                Code = DslDiagnosticCodes.UnsupportedLinqShape,
-                Message = $"Could not parse Where predicate in retrieval for '{varName}'.",
-                Location = new DslDiagnosticLocation { Section = "assert", Hint = whereArg.ToString() }
-            });
-            return null;
+                _diagnostics.Add(new DslDiagnostic
+                {
+                    Code = DslDiagnosticCodes.UnsupportedLinqShape,
+                    Message = $"Could not parse Where predicate in retrieval for '{varName}'.",
+                    Location = new DslDiagnosticLocation { Section = "assert", Hint = whereArg.ToString() }
+                });
+                return null;
+            }
+
+            return new DslRetrieval
+            {
+                Var = varName,
+                Kind = kind,
+                EntitySet = entitySet,
+                Alias = alias ?? "x",
+                Where = whereExpr
+            };
         }
 
-        return new DslRetrieval
+        // Case 2: xrm.ape_developerskillSet — no Where clause (retrieve all)
+        if (body is MemberAccessExpressionSyntax directEntitySetAccess)
         {
-            Var = varName,
-            Kind = kind,
-            EntitySet = entitySet,
-            Alias = alias ?? "x",
-            Where = whereExpr
-        };
+            var entitySet = directEntitySetAccess.Name.Identifier.Text;
+            return new DslRetrieval
+            {
+                Var = varName,
+                Kind = kind,
+                EntitySet = entitySet,
+                Alias = "x",
+                Where = null
+            };
+        }
+
+        return null;
     }
 
     private (string? alias, DslWhereExpression? expr) ParseWhereLambda(ExpressionSyntax lambdaExpr)

@@ -6,6 +6,7 @@ import type {
     DslOperation,
     DslAssertion,
     DslAssertionTarget,
+    DslRetrieval,
     DslValueExpression,
 } from "../models/dsl.ts";
 
@@ -62,11 +63,16 @@ export function generateDsl(
     const asserts = sorted.filter((n) => (n.data as ProducerNodeData | ServiceNodeData | AssertNodeData).nodeType === "assert");
 
     // Arrange bindings
+    let anonIndex = 0;
     const bindings: DslBinding[] = producers.map((node) => {
         const d = node.data as ProducerNodeData;
+        const isAnon = d.anonymous;
+        const bindingId = isAnon ? `_anon${anonIndex}` : node.id;
+        const bindingVar = isAnon ? `_anon${anonIndex}` : d.variableName;
+        if (isAnon) anonIndex++;
         return {
-            id: node.id,
-            var: d.variableName,
+            id: bindingId,
+            var: bindingVar,
             kind: "producerDraft",
             producer: {
                 call: `DataProducer.${d.entityName}.${d.draftId}`,
@@ -76,9 +82,17 @@ export function generateDsl(
         };
     });
 
-    // Act - use first service node
-    const svcNode = services[0];
-    const svcData = svcNode ? svcNode.data as ServiceNodeData : null;
+    // Split service nodes: first non-retrieve is the Act, retrieve nodes become retrievals
+    const actServiceNode = services.find((n) => {
+        const d = n.data as ServiceNodeData;
+        return d.operation !== "RetrieveList" && d.operation !== "RetrieveSingle";
+    }) ?? services[0];
+    const retrieveServiceNodes = services.filter((n) => {
+        const d = n.data as ServiceNodeData;
+        return n !== actServiceNode && (d.operation === "RetrieveList" || d.operation === "RetrieveSingle");
+    });
+
+    const svcData = actServiceNode ? actServiceNode.data as ServiceNodeData : null;
     const operation: DslOperation = svcData
         ? {
             kind: mapOperationKind(svcData.operation),
@@ -90,7 +104,36 @@ export function generateDsl(
         }
         : { kind: "create", awaited: false, unawaitedVariant: false };
 
-    // Assert
+    // Assert retrievals from retrieve service nodes
+    const retrievals: DslRetrieval[] = retrieveServiceNodes.map((node) => {
+        const d = node.data as ServiceNodeData;
+        const kind = d.operation === "RetrieveList" ? "retrieveMultiple" : "retrieveFirstOrDefault";
+        return {
+            var: d.resultVar ?? "result",
+            kind,
+            entitySet: d.entitySet ?? "",
+            alias: "x",
+            where: d.whereExpressions.length > 0
+                ? {
+                    op: d.whereExpressions.length > 1 ? "and" : d.whereExpressions[0].operator,
+                    ...(d.whereExpressions.length === 1
+                        ? {
+                            left: { kind: "member", root: "x", path: [d.whereExpressions[0].column] },
+                            right: parseStringValue(d.whereExpressions[0].value),
+                        }
+                        : {
+                            items: d.whereExpressions.map((w) => ({
+                                op: w.operator,
+                                left: { kind: "member", root: "x", path: [w.column] },
+                                right: parseStringValue(w.value),
+                            })),
+                        }),
+                }
+                : null,
+        };
+    });
+
+    // Assert assertions
     const assertions: DslAssertion[] = asserts.map((node) => {
         const d = node.data as AssertNodeData;
         const target: DslAssertionTarget = d.targetVar
@@ -118,7 +161,7 @@ export function generateDsl(
                 operation,
             },
             assert: {
-                retrievals: [],
+                retrievals,
                 assertions,
             },
         },

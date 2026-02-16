@@ -28,6 +28,7 @@ export interface AssertNodeData {
     nodeType: "assert";
     assertionKind: string;
     targetVar?: string;
+    targetPath?: string[];
     expectedValue?: string;
     [key: string]: unknown;
 }

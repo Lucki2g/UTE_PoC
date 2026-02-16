@@ -138,6 +138,7 @@ export function loadDslToDiagram(
             nodeType: "assert",
             assertionKind: a.kind,
             targetVar: a.target.name ?? a.target.rootVar,
+            targetPath: a.target.path ?? [],
             expectedValue: a.expected && "value" in a.expected ? String(a.expected.value) : undefined,
         };
 

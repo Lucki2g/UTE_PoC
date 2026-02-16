@@ -136,9 +136,10 @@ export function generateDsl(
     // Assert assertions
     const assertions: DslAssertion[] = asserts.map((node) => {
         const d = node.data as AssertNodeData;
-        const target: DslAssertionTarget = d.targetVar
-            ? { kind: "variable", name: d.targetVar }
-            : { kind: "variable", name: "result" };
+        const hasPath = d.targetPath && d.targetPath.length > 0;
+        const target: DslAssertionTarget = hasPath
+            ? { kind: "member", rootVar: d.targetVar ?? "result", path: d.targetPath! }
+            : { kind: "variable", name: d.targetVar ?? "result" };
 
         const assertion: DslAssertion = { kind: d.assertionKind, target };
         if (d.expectedValue !== undefined && d.expectedValue !== "") {

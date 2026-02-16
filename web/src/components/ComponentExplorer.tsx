@@ -199,8 +199,7 @@ function AssertTab() {
     const styles = useStyles();
     const blocks = [
         { id: "notNull", label: "NotNull" },
-        { id: "shouldBe", label: "ShouldBe" },
-        { id: "throws", label: "Throws" },
+        { id: "be", label: "Be" },
         { id: "containSingle", label: "ContainSingle" },
     ];
 

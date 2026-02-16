@@ -67,7 +67,6 @@ const useStyles = makeStyles({
 
 export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
     const nodeData = data as ServiceNodeData;
-    console.log(nodeData);
     const { dispatch } = useBuilderContext();
     const styles = useStyles();
 

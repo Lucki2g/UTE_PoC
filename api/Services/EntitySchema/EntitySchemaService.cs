@@ -8,6 +8,7 @@ public class EntitySchemaService : IEntitySchemaService
 {
     private readonly TestProjectPaths _paths;
     private readonly ConcurrentDictionary<string, List<EntityColumnInfo>> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, List<string>> _enumCache = new(StringComparer.OrdinalIgnoreCase);
     private bool _parsed;
     private readonly object _parseLock = new();
 
@@ -46,6 +47,13 @@ public class EntitySchemaService : IEntitySchemaService
         var tree = CSharpSyntaxTree.ParseText(code);
         var root = tree.GetCompilationUnitRoot();
 
+        // Parse all enum declarations first so we can attach members to columns
+        foreach (var enumDecl in root.DescendantNodes().OfType<EnumDeclarationSyntax>())
+        {
+            var members = enumDecl.Members.Select(m => m.Identifier.Text).ToList();
+            _enumCache[enumDecl.Identifier.Text] = members;
+        }
+
         foreach (var classDecl in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
         {
             var entityAttr = classDecl.AttributeLists
@@ -75,11 +83,15 @@ public class EntitySchemaService : IEntitySchemaService
                     .SelectMany(al => al.Attributes)
                     .FirstOrDefault(a => a.Name.ToString() == "DisplayName");
 
+                var dataType = prop.Type.ToString();
+                var enumTypeName = dataType.TrimEnd('?');
+
                 columns.Add(new EntityColumnInfo
                 {
                     LogicalName = logicalName,
                     DisplayName = displayNameAttr is not null ? GetAttributeStringArg(displayNameAttr) : null,
-                    DataType = prop.Type.ToString(),
+                    DataType = dataType,
+                    EnumMembers = _enumCache.TryGetValue(enumTypeName, out var members) ? members : null,
                 });
             }
 

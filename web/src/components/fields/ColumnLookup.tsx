@@ -10,6 +10,12 @@ import {
 import { useEntityColumns } from "../../hooks/useEntityColumns.ts";
 
 const useStyles = makeStyles({
+    combobox: {
+        minWidth: "80px",
+    },
+    listbox: {
+        maxHeight: "200px",
+    },
     option: {
         display: "flex",
         flexDirection: "column",
@@ -63,7 +69,10 @@ export function ColumnLookup({ entityName, value, onChange }: ColumnLookupProps)
                 onChange(ev.target.value);
             }}
             placeholder="Column..."
-            style={{ minWidth: "100px", flex: 1 }}
+            className={styles.combobox}
+            listbox={{ className: styles.listbox }}
+            positioning="below"
+            style={{ flex: 1 }}
         >
             {filtered.map((col) => (
                 <Option key={col.logicalName} value={col.logicalName} text={col.logicalName}>

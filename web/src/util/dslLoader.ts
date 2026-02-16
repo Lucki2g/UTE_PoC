@@ -36,7 +36,6 @@ export function loadDslToDiagram(
         const entityName = callParts.length >= 2 ? callParts[1] : "Unknown";
         const draftId = callParts.length >= 3 ? callParts[2] : binding.id;
 
-        console.log("producer node:", callParts, dsl);
         const nodeData: ProducerNodeData = {
             nodeType: "producer",
             draftId,

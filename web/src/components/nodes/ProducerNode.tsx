@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import {
     Input,
@@ -64,10 +65,31 @@ const useStyles = makeStyles({
 
 export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
     const nodeData = data as ProducerNodeData;
-    const { dispatch } = useBuilderContext();
+    const { state, dispatch } = useBuilderContext();
     const styles = useStyles();
 
-    console.log(nodeData)
+    // Compute previous producer nodes (those that appear before this node in the edge chain)
+    const previousProducers = useMemo(() => {
+        const predecessorIds = new Set<string>();
+        const visited = new Set<string>();
+
+        function collectPredecessors(nodeId: string) {
+            if (visited.has(nodeId)) return;
+            visited.add(nodeId);
+            for (const edge of state.edges) {
+                if (edge.target === nodeId) {
+                    predecessorIds.add(edge.source);
+                    collectPredecessors(edge.source);
+                }
+            }
+        }
+
+        collectPredecessors(id);
+
+        return state.nodes
+            .filter((n) => predecessorIds.has(n.id) && (n.data as ProducerNodeData).nodeType === "producer")
+            .map((n) => n.data as ProducerNodeData);
+    }, [id, state.nodes, state.edges]);
 
     return (
         <div className={`${styles.node} ${selected ? styles.selected : ""}`}>
@@ -101,9 +123,18 @@ export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
                                 key={i}
                                 dsl={m}
                                 entityName={nodeData.entityName}
+                                previousProducers={previousProducers}
                                 onPathChange={(path) => {
                                     const updated = [...nodeData.withMutations];
                                     updated[i] = { ...m, path };
+                                    dispatch({
+                                        type: "UPDATE_NODE",
+                                        payload: { id, data: { withMutations: updated } },
+                                    });
+                                }}
+                                onValueChange={(value) => {
+                                    const updated = [...nodeData.withMutations];
+                                    updated[i] = { ...m, value };
                                     dispatch({
                                         type: "UPDATE_NODE",
                                         payload: { id, data: { withMutations: updated } },

@@ -2,13 +2,22 @@ import { useEffect, useState } from "react";
 import { entitySchemaService, type EntityColumnInfo } from "../services/entitySchemaService.ts";
 
 export function useEntityColumns(entityName: string) {
-    const [columns, setColumns] = useState<EntityColumnInfo[]>([]);
+    const [columns, setColumns] = useState<EntityColumnInfo[]>(
+        () => (entityName ? entitySchemaService.getCachedColumns(entityName) : undefined) ?? [],
+    );
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         if (!entityName) {
             setColumns([]);
+            return;
+        }
+
+        // If already cached, set synchronously and skip loading state
+        const cached = entitySchemaService.getCachedColumns(entityName);
+        if (cached) {
+            setColumns(cached);
             return;
         }
 

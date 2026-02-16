@@ -4,6 +4,7 @@ export interface EntityColumnInfo {
     logicalName: string;
     displayName: string | null;
     dataType: string;
+    enumMembers: string[] | null;
 }
 
 const columnCache = new Map<string, EntityColumnInfo[]>();
@@ -17,6 +18,10 @@ export const entitySchemaService = {
         const columns = await api.get<EntityColumnInfo[]>(`/schema/entities/${key}/columns`);
         columnCache.set(key, columns);
         return columns;
+    },
+
+    getCachedColumns(entityName: string): EntityColumnInfo[] | undefined {
+        return columnCache.get(entityName.toLowerCase());
     },
 
     clearCache() {

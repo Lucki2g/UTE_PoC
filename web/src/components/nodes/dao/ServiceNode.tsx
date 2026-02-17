@@ -2,11 +2,18 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import {
     Input,
     Dropdown,
+    Menu,
+    MenuButton,
+    MenuItem,
+    MenuList,
+    MenuPopover,
+    MenuTrigger,
     Option,
     Text,
     makeStyles,
     tokens,
 } from "@fluentui/react-components";
+import { DeleteRegular, MoreHorizontalRegular } from "@fluentui/react-icons";
 import type { BuilderNode, ServiceNodeData } from "../../../models/builder.ts";
 import { useBuilderContext } from "../../../contexts/BuilderContext.tsx";
 import dataverseserviceIcon from "../../../assets/dataverseservice-icon.svg";
@@ -77,7 +84,22 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
         <div className={`${styles.node} ${selected ? styles.selected : ""}`}>
             <div className={styles.header}>
                 <img src={dataverseserviceIcon} alt="" className={styles.icon} />
-                <Text size={200} weight="semibold">DataverseService</Text>
+                <Text size={200} weight="semibold" style={{ flex: 1 }}>DataverseService</Text>
+                <Menu>
+                    <MenuTrigger disableButtonEnhancement>
+                        <MenuButton appearance="subtle" icon={<MoreHorizontalRegular />} size="small" />
+                    </MenuTrigger>
+                    <MenuPopover>
+                        <MenuList>
+                            <MenuItem
+                                icon={<DeleteRegular />}
+                                onClick={() => dispatch({ type: "REMOVE_NODE", payload: id })}
+                            >
+                                Delete
+                            </MenuItem>
+                        </MenuList>
+                    </MenuPopover>
+                </Menu>
             </div>
 
             {/* OPERATION */}

@@ -2,12 +2,19 @@ import { useCallback, useMemo, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import {
     Input,
+    Menu,
+    MenuButton,
+    MenuItem,
+    MenuList,
+    MenuPopover,
+    MenuTrigger,
     Switch,
     Text,
     makeStyles,
     mergeClasses,
     tokens,
 } from "@fluentui/react-components";
+import { DeleteRegular, MoreHorizontalRegular } from "@fluentui/react-icons";
 import type { BuilderNode, ProducerNodeData } from "../../../models/builder.ts";
 import { useBuilderContext } from "../../../contexts/BuilderContext.tsx";
 import dataproducerIcon from "../../../assets/dataproducer-icon.svg";
@@ -146,7 +153,22 @@ export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
         >
             <div className={styles.header}>
                 <img src={dataproducerIcon} alt="" className={styles.icon} />
-                <Text size={200} weight="semibold">{nodeData.draftId} ({nodeData.entityName})</Text>
+                <Text size={200} weight="semibold" style={{ flex: 1 }}>{nodeData.draftId} ({nodeData.entityName})</Text>
+                <Menu>
+                    <MenuTrigger disableButtonEnhancement>
+                        <MenuButton appearance="subtle" icon={<MoreHorizontalRegular />} size="small" />
+                    </MenuTrigger>
+                    <MenuPopover>
+                        <MenuList>
+                            <MenuItem
+                                icon={<DeleteRegular />}
+                                onClick={() => dispatch({ type: "REMOVE_NODE", payload: id })}
+                            >
+                                Delete
+                            </MenuItem>
+                        </MenuList>
+                    </MenuPopover>
+                </Menu>
             </div>
 
             <div className={styles.body}>

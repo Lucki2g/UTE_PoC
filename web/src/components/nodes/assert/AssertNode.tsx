@@ -4,11 +4,18 @@ import {
     Combobox,
     Dropdown,
     Input,
+    Menu,
+    MenuButton,
+    MenuItem,
+    MenuList,
+    MenuPopover,
+    MenuTrigger,
     Option,
     Text,
     makeStyles,
     tokens,
 } from "@fluentui/react-components";
+import { DeleteRegular, MoreHorizontalRegular } from "@fluentui/react-icons";
 import type { BuilderNode, AssertNodeData, ProducerNodeData, ServiceNodeData } from "../../../models/builder.ts";
 import { useBuilderContext } from "../../../contexts/BuilderContext.tsx";
 import { ColumnLookup } from "../../fields/ColumnLookup.tsx";
@@ -101,7 +108,22 @@ export function AssertNode({ id, data, selected }: NodeProps<BuilderNode>) {
         <div className={`${styles.node} ${selected ? styles.selected : ""}`}>
             <div className={styles.header}>
                 <img src={assertIcon} alt="" className={styles.icon} />
-                <Text size={200} weight="semibold">Assert</Text>
+                <Text size={200} weight="semibold" style={{ flex: 1 }}>Assert</Text>
+                <Menu>
+                    <MenuTrigger disableButtonEnhancement>
+                        <MenuButton appearance="subtle" icon={<MoreHorizontalRegular />} size="small" />
+                    </MenuTrigger>
+                    <MenuPopover>
+                        <MenuList>
+                            <MenuItem
+                                icon={<DeleteRegular />}
+                                onClick={() => dispatch({ type: "REMOVE_NODE", payload: id })}
+                            >
+                                Delete
+                            </MenuItem>
+                        </MenuList>
+                    </MenuPopover>
+                </Menu>
             </div>
 
             <div className={styles.body}>

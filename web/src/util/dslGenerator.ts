@@ -31,7 +31,7 @@ function mapOperationKind(op: string): string {
     const map: Record<string, string> = {
         Create: "create",
         Update: "update",
-        RetrieveSingle: "retrieveSingle",
+        RetrieveSingle: "retrieveFirstOrDefault",
         RetrieveList: "retrieveMultiple",
         Delete: "delete",
     };
@@ -86,7 +86,7 @@ export function generateDsl(
     const actServiceNode = services.find((n) => {
         const d = n.data as ServiceNodeData;
         return d.operation !== "RetrieveList" && d.operation !== "RetrieveSingle";
-    }) ?? services[0];
+    }) ?? null;
     const retrieveServiceNodes = services.filter((n) => {
         const d = n.data as ServiceNodeData;
         return n !== actServiceNode && (d.operation === "RetrieveList" || d.operation === "RetrieveSingle");

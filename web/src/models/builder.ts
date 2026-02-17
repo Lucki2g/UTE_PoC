@@ -52,6 +52,8 @@ export interface DiagramState {
     testClassName: string | null;
     folderName: string | null;
     dirty: boolean;
+    /** True when the test has not yet been persisted to the backend. */
+    isNew: boolean;
 }
 
 export const emptyDiagram: DiagramState = {
@@ -61,4 +63,5 @@ export const emptyDiagram: DiagramState = {
     testClassName: null,
     folderName: null,
     dirty: false,
+    isNew: false,
 };

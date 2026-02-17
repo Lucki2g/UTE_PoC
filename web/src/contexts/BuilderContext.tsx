@@ -12,6 +12,7 @@ type BuilderAction =
     | { type: "UPDATE_NODE"; payload: { id: string; data: Record<string, unknown> } }
     | { type: "REMOVE_NODE"; payload: string }
     | { type: "MARK_CLEAN" }
+    | { type: "MARK_PERSISTED"; payload: string }
     | { type: "CLEAR" };
 
 function builderReducer(state: DiagramState, action: BuilderAction): DiagramState {
@@ -45,6 +46,8 @@ function builderReducer(state: DiagramState, action: BuilderAction): DiagramStat
             };
         case "MARK_CLEAN":
             return { ...state, dirty: false };
+        case "MARK_PERSISTED":
+            return { ...state, isNew: false, testClassName: action.payload };
         case "CLEAR":
             return emptyDiagram;
     }

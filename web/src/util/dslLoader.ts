@@ -178,5 +178,6 @@ export function loadDslToDiagram(
         testClassName: className,
         folderName: null,
         dirty: false,
+        isNew: false,
     };
 }

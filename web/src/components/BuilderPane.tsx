@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type DragEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type DragEvent } from "react";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog.tsx";
 import {
     Text,
@@ -29,12 +29,16 @@ import {
 } from "@fluentui/react-icons";
 import {
     ReactFlow,
+    ReactFlowProvider,
     Background,
     Controls,
+    Panel,
+    useReactFlow,
     addEdge,
     type Connection,
     type OnNodesChange,
     type OnEdgesChange,
+    type Node,
     applyNodeChanges,
     applyEdgeChanges,
 } from "@xyflow/react";
@@ -46,6 +50,7 @@ import { generateDsl } from "../util/dslGenerator.ts";
 import { ProducerNode } from "./nodes/producer/ProducerNode.tsx";
 import { ServiceNode } from "./nodes/dao/ServiceNode.tsx";
 import { AssertNode } from "./nodes/assert/AssertNode.tsx";
+import { DropZoneNode, type DropZoneNodeData } from "./nodes/DropZoneNode.tsx";
 import type {
     ProducerNodeData,
     ServiceNodeData,
@@ -57,6 +62,7 @@ const nodeTypes = {
     producer: ProducerNode,
     service: ServiceNode,
     assert: AssertNode,
+    dropZone: DropZoneNode,
 };
 
 let nodeIdCounter = 0;
@@ -66,6 +72,7 @@ function nextId() {
 
 const NODE_X = 250;
 const NODE_SPACING = 150;
+const DROP_ZONE_HEIGHT = 40;
 
 const useStyles = makeStyles({
     pane: {
@@ -90,25 +97,70 @@ const useStyles = makeStyles({
         flex: 1,
         position: "relative" as const,
     },
-    placeholder: {
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100%",
-        gap: tokens.spacingVerticalM,
-    },
     dirtyBadge: {
         marginLeft: tokens.spacingHorizontalXS,
         backgroundColor: tokens.colorPaletteDarkOrangeBackground3,
     },
 });
 
-export function BuilderPane() {
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Sort nodes by Y position (top to bottom). */
+function sortedByY(nodes: BuilderNode[]): BuilderNode[] {
+    return [...nodes].sort((a, b) => a.position.y - b.position.y);
+}
+
+/** Create a BuilderNode from drop event data, positioned at (x, y). */
+function createNodeFromDrop(
+    type: string,
+    rawData: string,
+    x: number,
+    y: number,
+): BuilderNode | null {
+    switch (type) {
+        case "producer": {
+            const producer = JSON.parse(rawData) as { entityName: string; draftId?: string };
+            const data: ProducerNodeData = {
+                nodeType: "producer",
+                draftId: producer.draftId ?? producer.entityName,
+                entityName: producer.entityName,
+                variableName: producer.entityName.toLowerCase(),
+                build: false,
+                anonymous: false,
+                withMutations: [],
+            };
+            return { id: nextId(), type: "producer", position: { x, y }, data };
+        }
+        case "assert": {
+            const data: AssertNodeData = {
+                nodeType: "assert",
+                assertionKind: rawData || "notNull",
+                targetVar: "",
+                expectedValue: "",
+            };
+            return { id: nextId(), type: "assert", position: { x, y }, data };
+        }
+        case "where": {
+            const data: ServiceNodeData = {
+                nodeType: "service",
+                operation: "RetrieveList",
+                whereExpressions: [{ column: "", operator: "equals", value: "" }],
+            };
+            return { id: nextId(), type: "service", position: { x, y }, data };
+        }
+        default:
+            return null;
+    }
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
+function BuilderPaneInner() {
     const { state, dispatch } = useBuilderContext();
     const tests = useTests();
     const git = useGit();
     const styles = useStyles();
+    const reactFlow = useReactFlow();
 
     const [newDialogOpen, setNewDialogOpen] = useState(false);
     const [newTestName, setNewTestName] = useState("");
@@ -117,6 +169,10 @@ export function BuilderPane() {
     const [createBranch, setCreateBranch] = useState(false);
     const [newBranchName, setNewBranchName] = useState("");
     const [closeWarningOpen, setCloseWarningOpen] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
+    const dragEnterCounter = useRef(0);
+
+    // ─── ReactFlow callbacks ─────────────────────────────────────────────────
 
     const onNodesChange: OnNodesChange<BuilderNode> = useCallback(
         (changes) => {
@@ -139,128 +195,249 @@ export function BuilderPane() {
         [dispatch, state.edges],
     );
 
-    const nextY = useMemo(() => {
-        if (state.nodes.length === 0) return 50;
-        const maxY = Math.max(...state.nodes.map((n) => n.position.y));
-        return maxY + NODE_SPACING;
-    }, [state.nodes]);
+    // ─── Drag tracking ───────────────────────────────────────────────────────
+
+    const onDragEnter = useCallback((e: DragEvent) => {
+        if (!state.testName) return;
+        if (e.dataTransfer.types.includes("application/testengine-type")) {
+            dragEnterCounter.current++;
+            setIsDragging(true);
+        }
+    }, [state.testName]);
+
+    const onDragLeave = useCallback(() => {
+        dragEnterCounter.current--;
+        if (dragEnterCounter.current <= 0) {
+            dragEnterCounter.current = 0;
+            setIsDragging(false);
+        }
+    }, []);
 
     const onDragOver = useCallback((e: DragEvent) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
     }, []);
 
+    // ─── Drop handling ───────────────────────────────────────────────────────
+
+    /** Append node at the end of the diagram. */
+    const appendNode = useCallback(
+        (node: BuilderNode) => {
+            dispatch({ type: "ADD_NODE", payload: node });
+            if (state.nodes.length > 0) {
+                const sorted = sortedByY(state.nodes);
+                const lastNode = sorted[sorted.length - 1];
+                const edge = {
+                    id: `e_${lastNode.id}_${node.id}`,
+                    source: lastNode.id,
+                    target: node.id,
+                };
+                dispatch({ type: "SET_EDGES", payload: [...state.edges, edge] });
+            }
+        },
+        [dispatch, state.nodes, state.edges],
+    );
+
+    /** Insert node at a specific index in the Y-sorted node list. */
+    const insertNodeAt = useCallback(
+        (index: number, node: BuilderNode) => {
+            const sorted = sortedByY(state.nodes);
+
+            // If index is at the end, just append
+            if (index >= sorted.length) {
+                appendNode(node);
+                return;
+            }
+
+            // Shift nodes at and below the insertion point down
+            const updatedNodes = sorted.map((n, i) => {
+                if (i >= index) {
+                    return { ...n, position: { ...n.position, y: n.position.y + NODE_SPACING } };
+                }
+                return n;
+            });
+
+            // Insert the new node
+            const allNodes = [...updatedNodes.slice(0, index), node, ...updatedNodes.slice(index)];
+
+            // Re-wire edges: remove old edge at insertion point, add two new ones
+            const prev = index > 0 ? sorted[index - 1] : null;
+            const next = sorted[index];
+
+            let newEdges = [...state.edges];
+
+            // Remove edge between prev and next if it exists
+            if (prev && next) {
+                newEdges = newEdges.filter(
+                    (e) => !(e.source === prev.id && e.target === next.id),
+                );
+            }
+
+            // Connect prev → new node
+            if (prev) {
+                newEdges.push({
+                    id: `e_${prev.id}_${node.id}`,
+                    source: prev.id,
+                    target: node.id,
+                });
+            }
+
+            // Connect new node → next
+            if (next) {
+                newEdges.push({
+                    id: `e_${node.id}_${next.id}`,
+                    source: node.id,
+                    target: next.id,
+                });
+            }
+
+            dispatch({ type: "SET_NODES", payload: allNodes });
+            dispatch({ type: "SET_EDGES", payload: newEdges });
+        },
+        [dispatch, state.nodes, state.edges, appendNode],
+    );
+
+    /** Handle a drop on a specific drop-zone index. */
+    const handleDropAtIndex = useCallback(
+        (index: number, e: DragEvent) => {
+            const type = e.dataTransfer.getData("application/testengine-type");
+            const rawData = e.dataTransfer.getData("application/testengine-data");
+            if (!type) return;
+
+            const sorted = sortedByY(state.nodes);
+            // Position node at the drop zone's Y
+            let y: number;
+            if (index === 0) {
+                y = (sorted[0]?.position.y ?? 50) - NODE_SPACING;
+            } else if (index >= sorted.length) {
+                y = (sorted[sorted.length - 1]?.position.y ?? 50) + NODE_SPACING;
+            } else {
+                y = (sorted[index - 1].position.y + sorted[index].position.y) / 2;
+            }
+
+            const node = createNodeFromDrop(type, rawData, NODE_X, y);
+            if (!node) return;
+
+            insertNodeAt(index, node);
+            setIsDragging(false);
+            dragEnterCounter.current = 0;
+        },
+        [state.nodes, insertNodeAt],
+    );
+
+    /** Handle a drop on the canvas background (not on a drop zone). */
     const onDrop = useCallback(
         (e: DragEvent) => {
             e.preventDefault();
+            setIsDragging(false);
+            dragEnterCounter.current = 0;
+
+            if (!state.testName) return;
+
             const type = e.dataTransfer.getData("application/testengine-type");
             const rawData = e.dataTransfer.getData("application/testengine-data");
-
             if (!type) return;
 
-            let node: BuilderNode | null = null;
+            // Convert screen position to flow position
+            const position = reactFlow.screenToFlowPosition({
+                x: e.clientX,
+                y: e.clientY,
+            });
 
-            switch (type) {
-                case "producer": {
-                    const producer = JSON.parse(rawData) as { entityName: string; draftId?: string };
-                    const data: ProducerNodeData = {
-                        nodeType: "producer",
-                        draftId: producer.draftId ?? producer.entityName,
-                        entityName: producer.entityName,
-                        variableName: producer.entityName.toLowerCase(),
-                        build: false,
-                        anonymous: false,
-                        withMutations: [],
-                    };
-                    node = {
-                        id: nextId(),
-                        type: "producer",
-                        position: { x: NODE_X, y: nextY },
-                        data,
-                    };
-                    break;
-                }
-                case "assert": {
-                    const data: AssertNodeData = {
-                        nodeType: "assert",
-                        assertionKind: rawData || "notNull",
-                        targetVar: "",
-                        expectedValue: "",
-                    };
-                    node = {
-                        id: nextId(),
-                        type: "assert",
-                        position: { x: NODE_X, y: nextY },
-                        data,
-                    };
-                    break;
-                }
-                case "where":
-                case "with":
-                case "build":
-                case "extension":
-                    if (type === "where") {
-                        const data: ServiceNodeData = {
-                            nodeType: "service",
-                            operation: "RetrieveList",
-                            whereExpressions: [{ column: "", operator: "equals", value: "" }],
-                        };
-                        node = {
-                            id: nextId(),
-                            type: "service",
-                            position: { x: NODE_X, y: nextY },
-                            data,
-                        };
-                    }
-                    break;
-            }
+            const node = createNodeFromDrop(type, rawData, position.x, position.y);
+            if (!node) return;
 
-            if (node) {
-                dispatch({ type: "ADD_NODE", payload: node });
-
-                if (state.nodes.length > 0) {
-                    const lastNode = state.nodes[state.nodes.length - 1];
-                    const edge = {
-                        id: `e_${lastNode.id}_${node.id}`,
-                        source: lastNode.id,
-                        target: node.id,
-                    };
-                    dispatch({ type: "SET_EDGES", payload: [...state.edges, edge] });
-                }
-            }
+            appendNode(node);
         },
-        [dispatch, nextY, state.nodes, state.edges],
+        [state.testName, reactFlow, appendNode],
     );
 
-    const handleSave = useCallback(async () => {
+    // ─── Drop zone nodes ─────────────────────────────────────────────────────
+
+    const dropZoneNodes = useMemo((): Node[] => {
+        if (!isDragging || state.nodes.length === 0) return [];
+
+        const sorted = sortedByY(state.nodes);
+        const zones: Node[] = [];
+
+        // Zone above first node
+        zones.push({
+            id: "dz_0",
+            type: "dropZone",
+            position: { x: NODE_X, y: sorted[0].position.y - NODE_SPACING / 2 - DROP_ZONE_HEIGHT / 2 },
+            data: {
+                nodeType: "dropZone",
+                insertionIndex: 0,
+                onDropAtIndex: handleDropAtIndex,
+            } satisfies DropZoneNodeData,
+            selectable: false,
+            draggable: false,
+        });
+
+        // Zones between consecutive nodes
+        for (let i = 0; i < sorted.length - 1; i++) {
+            const midY = (sorted[i].position.y + sorted[i + 1].position.y) / 2;
+            zones.push({
+                id: `dz_${i + 1}`,
+                type: "dropZone",
+                position: { x: NODE_X, y: midY - DROP_ZONE_HEIGHT / 2 },
+                data: {
+                    nodeType: "dropZone",
+                    insertionIndex: i + 1,
+                    onDropAtIndex: handleDropAtIndex,
+                } satisfies DropZoneNodeData,
+                selectable: false,
+                draggable: false,
+            });
+        }
+
+        // Zone below last node
+        zones.push({
+            id: `dz_${sorted.length}`,
+            type: "dropZone",
+            position: { x: NODE_X, y: sorted[sorted.length - 1].position.y + NODE_SPACING / 2 + DROP_ZONE_HEIGHT / 2 },
+            data: {
+                nodeType: "dropZone",
+                insertionIndex: sorted.length,
+                onDropAtIndex: handleDropAtIndex,
+            } satisfies DropZoneNodeData,
+            selectable: false,
+            draggable: false,
+        });
+
+        return zones;
+    }, [isDragging, state.nodes, handleDropAtIndex]);
+
+    const displayNodes = useMemo(
+        () => [...state.nodes, ...dropZoneNodes] as BuilderNode[],
+        [state.nodes, dropZoneNodes],
+    );
+
+    // ─── Save / Close handlers ───────────────────────────────────────────────
+
+    const persistTest = useCallback(async () => {
         if (!state.testName) return;
         const dsl = generateDsl(state.nodes, state.testName);
-        if (state.testClassName) {
-            await tests.update({ className: state.testClassName, code: dsl });
-        } else {
+        if (state.isNew) {
             await tests.create({
                 code: dsl,
                 className: state.testClassName ?? undefined,
                 folder: state.folderName ?? undefined,
             });
+            dispatch({ type: "MARK_PERSISTED", payload: state.testClassName ?? state.testName });
+        } else {
+            await tests.update({ className: state.testClassName!, code: dsl });
         }
         dispatch({ type: "MARK_CLEAN" });
     }, [state, tests, dispatch]);
 
+    const handleSave = useCallback(async () => {
+        await persistTest();
+    }, [persistTest]);
+
     const handleSaveAndPublish = useCallback(async () => {
-        if (!state.testName) return;
-        const dsl = generateDsl(state.nodes, state.testName);
-        if (state.testClassName) {
-            await tests.update({ className: state.testClassName, code: dsl });
-        } else {
-            await tests.create({
-                code: dsl,
-                className: state.testClassName ?? undefined,
-                folder: state.folderName ?? undefined,
-            });
-        }
-        dispatch({ type: "MARK_CLEAN" });
-    }, [state, tests, dispatch]);
+        await persistTest();
+    }, [persistTest]);
 
     const handleClose = useCallback(() => {
         if (state.dirty) {
@@ -293,6 +470,7 @@ export function BuilderPane() {
                 testClassName: newClassName.trim() || null,
                 folderName: newFolderName.trim() || null,
                 dirty: false,
+                isNew: true,
             },
         });
         setNewDialogOpen(false);
@@ -305,6 +483,8 @@ export function BuilderPane() {
 
     const isEmpty = state.nodes.length === 0;
     const hasTestOpen = !!state.testName;
+
+    // ─── Render ──────────────────────────────────────────────────────────────
 
     return (
         <div className={styles.pane}>
@@ -415,40 +595,41 @@ export function BuilderPane() {
             </div>
 
             <div className={styles.canvas}>
-                {isEmpty ? (
-                    <div className={styles.placeholder}>
-                        <HexagonRegular fontSize={48} style={{ opacity: 0.2 }} />
-                        <Text size={300} style={{ color: tokens.colorNeutralForeground4 }}>
-                            Select a test or drag components to begin
-                        </Text>
-                        <Text size={200} style={{ color: tokens.colorNeutralForeground4 }}>
-                            Drag DataProducers, Services, and Asserts from the right panel
-                        </Text>
-                    </div>
-                ) : (
-                    <ReactFlow
-                        nodes={state.nodes}
-                        edges={state.edges}
-                        onNodesChange={onNodesChange}
-                        onEdgesChange={onEdgesChange}
-                        onConnect={onConnect}
-                        onDragOver={onDragOver}
-                        onDrop={onDrop}
-                        nodeTypes={nodeTypes}
-                        fitView
-                        proOptions={{ hideAttribution: true }}
-                    >
-                        <Background />
-                        <Controls />
-                        {state.dirty && (
-                            <div style={{ position: "absolute", top: tokens.spacingVerticalM, right: tokens.spacingHorizontalM }}>
-                                <Badge icon={<BeakerSettingsRegular />} size="medium" className={styles.dirtyBadge}>
-                                    Unsaved Changes
-                                </Badge>
-                            </div>
-                        )}
-                    </ReactFlow>
-                )}
+                <ReactFlow
+                    nodes={displayNodes}
+                    edges={state.edges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={onConnect}
+                    onDragOver={onDragOver}
+                    onDragEnter={onDragEnter}
+                    onDragLeave={onDragLeave}
+                    onDrop={onDrop}
+                    nodeTypes={nodeTypes}
+                    fitView
+                    proOptions={{ hideAttribution: true }}
+                >
+                    <Background />
+                    <Controls />
+                    {isEmpty && !isDragging && (
+                        <Panel position="top-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: tokens.spacingVerticalM, pointerEvents: "none" }}>
+                            <HexagonRegular fontSize={48} style={{ opacity: 0.2 }} />
+                            <Text size={300} style={{ color: tokens.colorNeutralForeground4 }}>
+                                Select a test or drag components to begin
+                            </Text>
+                            <Text size={200} style={{ color: tokens.colorNeutralForeground4 }}>
+                                Drag DataProducers, Services, and Asserts from the right panel
+                            </Text>
+                        </Panel>
+                    )}
+                    {state.dirty && (
+                        <div style={{ position: "absolute", top: tokens.spacingVerticalM, right: tokens.spacingHorizontalM }}>
+                            <Badge icon={<BeakerSettingsRegular />} size="medium" className={styles.dirtyBadge}>
+                                Unsaved Changes
+                            </Badge>
+                        </div>
+                    )}
+                </ReactFlow>
             </div>
 
             <UnsavedChangesDialog
@@ -459,5 +640,13 @@ export function BuilderPane() {
                 discardLabel="Discard & Close"
             />
         </div>
+    );
+}
+
+export function BuilderPane() {
+    return (
+        <ReactFlowProvider>
+            <BuilderPaneInner />
+        </ReactFlowProvider>
     );
 }

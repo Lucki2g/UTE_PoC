@@ -21,6 +21,7 @@ import {
     DismissCircleFilled,
     CircleRegular,
     BeakerEditRegular,
+    FolderRegular,
 } from "@fluentui/react-icons";
 import { useTests } from "../hooks/useTests.ts";
 import { useBuilderContext } from "../contexts/BuilderContext.tsx";
@@ -42,30 +43,46 @@ function buildTree(tests: TestMetadata[]): TestTreeNode[] {
     const root: TestTreeNode[] = [];
 
     for (const test of tests) {
-        const parts = test.className.split(".");
+        // Extract folder segments from filePath (e.g. "AccountTests/FooTests.cs" → ["AccountTests"])
+        const normalizedPath = test.filePath.replace(/\\/g, "/");
+        const pathSegments = normalizedPath.split("/");
+        const folderParts = pathSegments.slice(0, -1); // everything except the filename
+
         let current = root;
 
-        for (let i = 0; i < parts.length; i++) {
-            const label = parts[i];
-            const fullPath = parts.slice(0, i + 1).join(".");
-            let node = current.find((n) => n.label === label);
+        // Create folder nodes
+        for (let i = 0; i < folderParts.length; i++) {
+            const label = folderParts[i];
+            const fullPath = folderParts.slice(0, i + 1).join("/");
+            let node = current.find((n) => n.label === label && !n.test);
             if (!node) {
                 node = { label, fullPath, children: [] };
                 current.push(node);
             }
-            if (i === parts.length - 1) {
-                node.test = test;
-                for (const method of test.methodNames) {
-                    node.children.push({
-                        label: method,
-                        fullPath: `${test.className}.${method}`,
-                        children: [],
-                        method,
-                        test,
-                    });
-                }
-            }
             current = node.children;
+        }
+
+        // Create class node
+        const classFullPath = folderParts.length > 0
+            ? `${folderParts.join("/")}/${test.className}`
+            : test.className;
+        let classNode = current.find((n) => n.label === test.className);
+        if (!classNode) {
+            classNode = { label: test.className, fullPath: classFullPath, children: [], test };
+            current.push(classNode);
+        } else {
+            classNode.test = test;
+        }
+
+        // Add method nodes
+        for (const method of test.methodNames) {
+            classNode.children.push({
+                label: method,
+                fullPath: `${test.className}.${method}`,
+                children: [],
+                method,
+                test,
+            });
         }
     }
 
@@ -262,6 +279,7 @@ function TestTreeItem({
     const isExpanded = expanded.has(node.fullPath);
     const hasChildren = node.children.length > 0;
     const isMethod = !!node.method;
+    const isFolder = !node.test && !node.method;
     const status = getAggregateStatus(node, results, runningTests);
     const isSelected = selected === node.fullPath;
 
@@ -273,7 +291,7 @@ function TestTreeItem({
         >
             <TreeItemLayout
                 className={styles.treeItemLayout}
-                iconBefore={<ResultIcon status={status} />}
+                iconBefore={isFolder ? <FolderRegular fontSize={16} /> : <ResultIcon status={status} />}
                 onClick={() => {
                     if (hasChildren) onToggle(node.fullPath);
                     onSelect(node.fullPath);

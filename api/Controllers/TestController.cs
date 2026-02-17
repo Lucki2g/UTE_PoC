@@ -57,7 +57,7 @@ public static class TestController
     {
         try
         {
-            await testService.CreateTestAsync(request.Code);
+            await testService.CreateTestAsync(request.Code, request.ClassName, request.Folder);
             return Results.Ok(new { message = "Test created successfully" });
         }
         catch (NotImplementedException ex)

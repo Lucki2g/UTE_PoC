@@ -176,6 +176,7 @@ export function loadDslToDiagram(
         edges,
         testName: dsl.test.name,
         testClassName: className,
+        folderName: null,
         dirty: false,
     };
 }

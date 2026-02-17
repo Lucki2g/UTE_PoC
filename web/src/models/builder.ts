@@ -50,6 +50,7 @@ export interface DiagramState {
     edges: BuilderEdge[];
     testName: string | null;
     testClassName: string | null;
+    folderName: string | null;
     dirty: boolean;
 }
 
@@ -58,5 +59,6 @@ export const emptyDiagram: DiagramState = {
     edges: [],
     testName: null,
     testClassName: null,
+    folderName: null,
     dirty: false,
 };

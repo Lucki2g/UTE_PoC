@@ -14,6 +14,8 @@ import {
     DialogActions,
     Input,
     Badge,
+    Field,
+    Checkbox,
     makeStyles,
     tokens,
 } from "@fluentui/react-components";
@@ -39,6 +41,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useBuilderContext } from "../contexts/BuilderContext.tsx";
 import { useTests } from "../hooks/useTests.ts";
+import { useGit } from "../hooks/useGit.ts";
 import { generateDsl } from "../util/dslGenerator.ts";
 import { ProducerNode } from "./nodes/producer/ProducerNode.tsx";
 import { ServiceNode } from "./nodes/dao/ServiceNode.tsx";
@@ -104,10 +107,15 @@ const useStyles = makeStyles({
 export function BuilderPane() {
     const { state, dispatch } = useBuilderContext();
     const tests = useTests();
+    const git = useGit();
     const styles = useStyles();
 
     const [newDialogOpen, setNewDialogOpen] = useState(false);
     const [newTestName, setNewTestName] = useState("");
+    const [newClassName, setNewClassName] = useState("");
+    const [newFolderName, setNewFolderName] = useState("");
+    const [createBranch, setCreateBranch] = useState(false);
+    const [newBranchName, setNewBranchName] = useState("");
     const [closeWarningOpen, setCloseWarningOpen] = useState(false);
 
     const onNodesChange: OnNodesChange<BuilderNode> = useCallback(
@@ -230,7 +238,11 @@ export function BuilderPane() {
         if (state.testClassName) {
             await tests.update({ className: state.testClassName, code: dsl });
         } else {
-            await tests.create({ code: dsl });
+            await tests.create({
+                code: dsl,
+                className: state.testClassName ?? undefined,
+                folder: state.folderName ?? undefined,
+            });
         }
         dispatch({ type: "MARK_CLEAN" });
     }, [state, tests, dispatch]);
@@ -241,7 +253,11 @@ export function BuilderPane() {
         if (state.testClassName) {
             await tests.update({ className: state.testClassName, code: dsl });
         } else {
-            await tests.create({ code: dsl });
+            await tests.create({
+                code: dsl,
+                className: state.testClassName ?? undefined,
+                folder: state.folderName ?? undefined,
+            });
         }
         dispatch({ type: "MARK_CLEAN" });
     }, [state, tests, dispatch]);
@@ -259,9 +275,14 @@ export function BuilderPane() {
         dispatch({ type: "CLEAR" });
     }, [dispatch]);
 
-    const handleCreateNew = useCallback(() => {
+    const handleCreateNew = useCallback(async () => {
         const name = newTestName.trim();
         if (!name) return;
+
+        if (createBranch && newBranchName.trim()) {
+            await git.createBranch({ branchName: newBranchName.trim() });
+        }
+
         dispatch({ type: "CLEAR" });
         dispatch({
             type: "SET_DIAGRAM",
@@ -269,13 +290,18 @@ export function BuilderPane() {
                 nodes: [],
                 edges: [],
                 testName: name,
-                testClassName: null,
+                testClassName: newClassName.trim() || null,
+                folderName: newFolderName.trim() || null,
                 dirty: false,
             },
         });
         setNewDialogOpen(false);
         setNewTestName("");
-    }, [dispatch, newTestName]);
+        setNewClassName("");
+        setNewFolderName("");
+        setCreateBranch(false);
+        setNewBranchName("");
+    }, [dispatch, newTestName, newClassName, newFolderName, createBranch, newBranchName, git]);
 
     const isEmpty = state.nodes.length === 0;
     const hasTestOpen = !!state.testName;
@@ -300,14 +326,43 @@ export function BuilderPane() {
                             <DialogSurface>
                                 <DialogBody>
                                     <DialogTitle>New Test Case</DialogTitle>
-                                    <DialogContent>
-                                        <Input
-                                            placeholder="Test case name"
-                                            value={newTestName}
-                                            onChange={(_ev, data) => setNewTestName(data.value)}
-                                            onKeyDown={(e) => { if (e.key === "Enter") handleCreateNew(); }}
-                                            style={{ width: "100%" }}
+                                    <DialogContent style={{ display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM }}>
+                                        <Field label="Test method name" required>
+                                            <Input
+                                                placeholder="e.g. EnsureNameIsCorrect"
+                                                value={newTestName}
+                                                onChange={(_ev, data) => setNewTestName(data.value)}
+                                                onKeyDown={(e) => { if (e.key === "Enter") handleCreateNew(); }}
+                                            />
+                                        </Field>
+                                        <Field label="Test class name">
+                                            <Input
+                                                placeholder="e.g. EnsureNameIsCorrectTests"
+                                                value={newClassName}
+                                                onChange={(_ev, data) => setNewClassName(data.value)}
+                                            />
+                                        </Field>
+                                        <Field label="Folder">
+                                            <Input
+                                                placeholder="e.g. AccountTests"
+                                                value={newFolderName}
+                                                onChange={(_ev, data) => setNewFolderName(data.value)}
+                                            />
+                                        </Field>
+                                        <Checkbox
+                                            label="Create a new branch"
+                                            checked={createBranch}
+                                            onChange={(_ev, data) => setCreateBranch(!!data.checked)}
                                         />
+                                        {createBranch && (
+                                            <Field label="Branch name">
+                                                <Input
+                                                    placeholder="e.g. feature/account-tests"
+                                                    value={newBranchName}
+                                                    onChange={(_ev, data) => setNewBranchName(data.value)}
+                                                />
+                                            </Field>
+                                        )}
                                     </DialogContent>
                                     <DialogActions>
                                         <DialogTrigger disableButtonEnhancement>
@@ -316,7 +371,7 @@ export function BuilderPane() {
                                         <Button
                                             appearance="primary"
                                             onClick={handleCreateNew}
-                                            disabled={!newTestName.trim()}
+                                            disabled={!newTestName.trim() || (createBranch && !newBranchName.trim())}
                                         >
                                             Create
                                         </Button>

@@ -34,6 +34,8 @@ export interface SyncMetadataRequest {
 
 export interface CreateTestRequest {
     code: DslTestDefinition;
+    className?: string;
+    folder?: string;
 }
 
 export interface UpdateTestRequest {

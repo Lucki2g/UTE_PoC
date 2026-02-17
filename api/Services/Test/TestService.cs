@@ -46,9 +46,9 @@ public class TestService : ITestService
         return results;
     }
 
-    public async Task CreateTestAsync(DslTestDefinition dsl)
+    public async Task CreateTestAsync(DslTestDefinition dsl, string? className = null, string? folder = null)
     {
-        var className = DeriveClassName(dsl.Test.Name);
+        className = string.IsNullOrWhiteSpace(className) ? DeriveClassName(dsl.Test.Name) : className;
 
         var existingFile = FindTestFile(className);
         if (existingFile != null)
@@ -68,7 +68,10 @@ public class TestService : ITestService
                     $"Generated code has syntax errors: {string.Join("; ", validation.Diagnostics.Select(d => d.Message))}");
         }
 
-        var filePath = Path.Combine(_testProjectPath, $"{className}.cs");
+        var directory = string.IsNullOrWhiteSpace(folder)
+            ? _testProjectPath
+            : Path.Combine(_testProjectPath, folder);
+        var filePath = Path.Combine(directory, $"{className}.cs");
         await _fileManager.WriteFileAsync(filePath, compileResult.CSharpCode);
     }
 

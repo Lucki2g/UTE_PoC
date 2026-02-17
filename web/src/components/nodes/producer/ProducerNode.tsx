@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import {
     Input,
     Switch,
     Text,
     makeStyles,
+    mergeClasses,
     tokens,
 } from "@fluentui/react-components";
 import type { BuilderNode, ProducerNodeData } from "../../../models/builder.ts";
@@ -24,6 +25,11 @@ const useStyles = makeStyles({
     selected: {
         borderColor: tokens.colorBrandStroke1 as string as never,
         boxShadow: tokens.shadow8Brand,
+    },
+    withDropTarget: {
+        borderColor: tokens.colorBrandStroke1 as string as never,
+        borderStyle: "dashed" as string as never,
+        backgroundColor: tokens.colorBrandBackground2,
     },
     header: {
         display: "flex",
@@ -67,6 +73,39 @@ export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
     const nodeData = data as ProducerNodeData;
     const { state, dispatch } = useBuilderContext();
     const styles = useStyles();
+    const [withDragOver, setWithDragOver] = useState(false);
+
+    const onDragOver = useCallback((e: React.DragEvent) => {
+        if (e.dataTransfer.types.includes("application/testengine-type")) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            setWithDragOver(true);
+        }
+    }, []);
+
+    const onDragLeave = useCallback(() => {
+        setWithDragOver(false);
+    }, []);
+
+    const onDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setWithDragOver(false);
+        const type = e.dataTransfer.getData("application/testengine-type");
+        if (type !== "with") return;
+        dispatch({
+            type: "UPDATE_NODE",
+            payload: {
+                id,
+                data: {
+                    withMutations: [
+                        ...nodeData.withMutations,
+                        { path: "", value: { type: "string", value: "" } },
+                    ],
+                },
+            },
+        });
+    }, [dispatch, id, nodeData.withMutations]);
 
     // Compute previous producer nodes (those that appear before this node in the edge chain)
     const previousProducers = useMemo(() => {
@@ -95,7 +134,16 @@ export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
     }, [id, state.nodes, state.edges]);
 
     return (
-        <div className={`${styles.node} ${selected ? styles.selected : ""}`}>
+        <div
+            className={mergeClasses(
+                styles.node,
+                selected && styles.selected,
+                withDragOver && styles.withDropTarget,
+            )}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+        >
             <div className={styles.header}>
                 <img src={dataproducerIcon} alt="" className={styles.icon} />
                 <Text size={200} weight="semibold">{nodeData.draftId} ({nodeData.entityName})</Text>

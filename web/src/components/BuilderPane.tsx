@@ -148,6 +148,9 @@ function createNodeFromDrop(
             };
             return { id: nextId(), type: "service", position: { x, y }, data };
         }
+        case "with":
+            // With blocks are dropped directly onto ProducerNodes, not onto the canvas
+            return null;
         default:
             return null;
     }

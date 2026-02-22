@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog.tsx";
 import {
     Text,
@@ -34,6 +34,7 @@ import {
     Controls,
     Panel,
     useReactFlow,
+    useNodesInitialized,
     addEdge,
     type Connection,
     type OnNodesChange,
@@ -71,7 +72,7 @@ function nextId() {
 }
 
 const NODE_X = 250;
-const NODE_SPACING = 150;
+const NODE_GAP = 80;
 const DROP_ZONE_HEIGHT = 40;
 
 const useStyles = makeStyles({
@@ -105,9 +106,14 @@ const useStyles = makeStyles({
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Sort nodes by Y position (top to bottom). */
-function sortedByY(nodes: BuilderNode[]): BuilderNode[] {
-    return [...nodes].sort((a, b) => a.position.y - b.position.y);
+/** Sort nodes by their order index, falling back to Y position. */
+function sortedByOrder(nodes: BuilderNode[]): BuilderNode[] {
+    return [...nodes].sort((a, b) => {
+        const orderA = (a.data as Record<string, unknown>)._orderIndex as number | undefined;
+        const orderB = (b.data as Record<string, unknown>)._orderIndex as number | undefined;
+        if (orderA != null && orderB != null) return orderA - orderB;
+        return a.position.y - b.position.y;
+    });
 }
 
 /** Create a BuilderNode from drop event data, positioned at (x, y). */
@@ -164,6 +170,7 @@ function BuilderPaneInner() {
     const git = useGit();
     const styles = useStyles();
     const reactFlow = useReactFlow();
+    const nodesInitialized = useNodesInitialized();
 
     const [newDialogOpen, setNewDialogOpen] = useState(false);
     const [newTestName, setNewTestName] = useState("");
@@ -173,13 +180,81 @@ function BuilderPaneInner() {
     const [newBranchName, setNewBranchName] = useState("");
     const [closeWarningOpen, setCloseWarningOpen] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
-    const dragEnterCounter = useRef(0);
+
+    // Track the last layout signature to avoid redundant repositioning
+    const lastLayoutSigRef = useRef("");
+
+    // ─── Auto-layout: measure node heights and reposition ─────────────────────
+
+    useEffect(() => {
+        if (!nodesInitialized || state.nodes.length === 0) return;
+
+        const sorted = sortedByOrder(state.nodes);
+
+        // Build a signature from node ids + their measured heights to detect actual changes
+        const heightEntries: { id: string; height: number }[] = [];
+        for (const n of sorted) {
+            const internal = reactFlow.getInternalNode(n.id);
+            const h = internal?.measured?.height ?? 0;
+            heightEntries.push({ id: n.id, height: h });
+        }
+
+        // If any node hasn't been measured yet, skip this layout pass
+        if (heightEntries.some((e) => e.height === 0)) return;
+
+        const sig = heightEntries.map((e) => `${e.id}:${e.height}`).join("|");
+        if (sig === lastLayoutSigRef.current) return;
+        lastLayoutSigRef.current = sig;
+
+        // Compute new Y positions: stack nodes top-to-bottom with NODE_GAP between them
+        // Also ensure every node has a stable _orderIndex
+        let currentY = 0;
+        let changed = false;
+        const repositioned: BuilderNode[] = [];
+        for (let i = 0; i < sorted.length; i++) {
+            const node = sorted[i];
+            const currentOrder = (node.data as Record<string, unknown>)._orderIndex;
+            const needsUpdate =
+                node.position.x !== NODE_X ||
+                node.position.y !== currentY ||
+                currentOrder !== i;
+            if (needsUpdate) {
+                changed = true;
+                repositioned.push({
+                    ...node,
+                    position: { x: NODE_X, y: currentY },
+                    data: { ...node.data, _orderIndex: i },
+                });
+            } else {
+                repositioned.push(node);
+            }
+            currentY += heightEntries[i].height + NODE_GAP;
+        }
+
+        if (changed) {
+            dispatch({ type: "SET_NODES", payload: repositioned });
+        }
+    }, [nodesInitialized, state.nodes, reactFlow, dispatch]);
 
     // ─── ReactFlow callbacks ─────────────────────────────────────────────────
 
     const onNodesChange: OnNodesChange<BuilderNode> = useCallback(
         (changes) => {
-            dispatch({ type: "SET_NODES", payload: applyNodeChanges(changes, state.nodes) });
+            // Filter out position changes — nodes are auto-laid-out and not user-moveable
+            // Also filter out changes for drop zone nodes (they're transient, not in state)
+            const filtered = changes.filter((c) => {
+                if (c.type === "position") return false;
+                if ("id" in c && typeof c.id === "string" && c.id.startsWith("dz_")) return false;
+                return true;
+            });
+            if (filtered.length === 0) return;
+            const updated = applyNodeChanges(filtered, state.nodes);
+            dispatch({ type: "SET_NODES", payload: updated });
+
+            // If dimensions changed, schedule a re-layout on next frame
+            if (filtered.some((c) => c.type === "dimensions")) {
+                lastLayoutSigRef.current = "";
+            }
         },
         [dispatch, state.nodes],
     );
@@ -199,52 +274,62 @@ function BuilderPaneInner() {
     );
 
     // ─── Drag tracking ───────────────────────────────────────────────────────
-
-    const onDragEnter = useCallback((e: DragEvent) => {
-        if (!state.testName) return;
-        if (e.dataTransfer.types.includes("application/testengine-type")) {
-            dragEnterCounter.current++;
-            setIsDragging(true);
-        }
-    }, [state.testName]);
-
-    const onDragLeave = useCallback(() => {
-        dragEnterCounter.current--;
-        if (dragEnterCounter.current <= 0) {
-            dragEnterCounter.current = 0;
-            setIsDragging(false);
-        }
-    }, []);
+    // Use dragOver with a short timeout for reliable detection.
+    // onDragEnter/onDragLeave are unreliable on nested ReactFlow DOM.
+    const dragTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isDraggingRef = useRef(false);
 
     const onDragOver = useCallback((e: DragEvent) => {
         e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
-    }, []);
+
+        if (!state.testName) return;
+        if (!e.dataTransfer.types.includes("application/testengine-type")) return;
+
+        if (!isDraggingRef.current) {
+            isDraggingRef.current = true;
+            setIsDragging(true);
+        }
+
+        // Reset the timeout — if no dragOver fires for 150ms, drag left the canvas
+        if (dragTimeoutRef.current) clearTimeout(dragTimeoutRef.current);
+        dragTimeoutRef.current = setTimeout(() => {
+            isDraggingRef.current = false;
+            setIsDragging(false);
+            dragTimeoutRef.current = null;
+        }, 150);
+    }, [state.testName]);
 
     // ─── Drop handling ───────────────────────────────────────────────────────
 
     /** Append node at the end of the diagram. */
     const appendNode = useCallback(
         (node: BuilderNode) => {
-            dispatch({ type: "ADD_NODE", payload: node });
-            if (state.nodes.length > 0) {
-                const sorted = sortedByY(state.nodes);
+            const sorted = sortedByOrder(state.nodes);
+
+            // Tag with order index so layout knows the insertion order
+            const orderIndex = sorted.length;
+            const tagged = { ...node, data: { ...node.data, _orderIndex: orderIndex } };
+
+            const newNodes = [...state.nodes, tagged];
+            let newEdges = state.edges;
+            if (sorted.length > 0) {
                 const lastNode = sorted[sorted.length - 1];
-                const edge = {
-                    id: `e_${lastNode.id}_${node.id}`,
+                newEdges = [...state.edges, {
+                    id: `e_${lastNode.id}_${tagged.id}`,
                     source: lastNode.id,
-                    target: node.id,
-                };
-                dispatch({ type: "SET_EDGES", payload: [...state.edges, edge] });
+                    target: tagged.id,
+                }];
             }
+            dispatch({ type: "SET_NODES_AND_EDGES", payload: { nodes: newNodes, edges: newEdges } });
         },
         [dispatch, state.nodes, state.edges],
     );
 
-    /** Insert node at a specific index in the Y-sorted node list. */
+    /** Insert node at a specific index in the ordered node list. */
     const insertNodeAt = useCallback(
         (index: number, node: BuilderNode) => {
-            const sorted = sortedByY(state.nodes);
+            const sorted = sortedByOrder(state.nodes);
 
             // If index is at the end, just append
             if (index >= sorted.length) {
@@ -252,16 +337,15 @@ function BuilderPaneInner() {
                 return;
             }
 
-            // Shift nodes at and below the insertion point down
+            // Assign order indices: items before index keep theirs, new node gets index, rest shift up
             const updatedNodes = sorted.map((n, i) => {
-                if (i >= index) {
-                    return { ...n, position: { ...n.position, y: n.position.y + NODE_SPACING } };
-                }
-                return n;
+                const orderIndex = i >= index ? i + 1 : i;
+                return { ...n, data: { ...n.data, _orderIndex: orderIndex } };
             });
+            const tagged = { ...node, data: { ...node.data, _orderIndex: index } };
 
             // Insert the new node
-            const allNodes = [...updatedNodes.slice(0, index), node, ...updatedNodes.slice(index)];
+            const allNodes = [...updatedNodes.slice(0, index), tagged, ...updatedNodes.slice(index)];
 
             // Re-wire edges: remove old edge at insertion point, add two new ones
             const prev = index > 0 ? sorted[index - 1] : null;
@@ -279,61 +363,68 @@ function BuilderPaneInner() {
             // Connect prev → new node
             if (prev) {
                 newEdges.push({
-                    id: `e_${prev.id}_${node.id}`,
+                    id: `e_${prev.id}_${tagged.id}`,
                     source: prev.id,
-                    target: node.id,
+                    target: tagged.id,
                 });
             }
 
             // Connect new node → next
             if (next) {
                 newEdges.push({
-                    id: `e_${node.id}_${next.id}`,
-                    source: node.id,
+                    id: `e_${tagged.id}_${next.id}`,
+                    source: tagged.id,
                     target: next.id,
                 });
             }
 
-            dispatch({ type: "SET_NODES", payload: allNodes });
-            dispatch({ type: "SET_EDGES", payload: newEdges });
+            dispatch({ type: "SET_NODES_AND_EDGES", payload: { nodes: allNodes, edges: newEdges } });
         },
         [dispatch, state.nodes, state.edges, appendNode],
     );
 
-    /** Handle a drop on a specific drop-zone index. */
-    const handleDropAtIndex = useCallback(
-        (index: number, e: DragEvent) => {
-            const type = e.dataTransfer.getData("application/testengine-type");
-            const rawData = e.dataTransfer.getData("application/testengine-data");
-            if (!type) return;
+    /** Determine insertion index from the drop Y position in flow coordinates. */
+    const getInsertionIndex = useCallback(
+        (flowY: number): number => {
+            const sorted = sortedByOrder(state.nodes);
+            if (sorted.length === 0) return 0;
 
-            const sorted = sortedByY(state.nodes);
-            // Position node at the drop zone's Y
-            let y: number;
-            if (index === 0) {
-                y = (sorted[0]?.position.y ?? 50) - NODE_SPACING;
-            } else if (index >= sorted.length) {
-                y = (sorted[sorted.length - 1]?.position.y ?? 50) + NODE_SPACING;
-            } else {
-                y = (sorted[index - 1].position.y + sorted[index].position.y) / 2;
+            // Read measured heights
+            const heights: number[] = sorted.map((n) => {
+                const internal = reactFlow.getInternalNode(n.id);
+                return internal?.measured?.height ?? 80;
+            });
+
+            // Find which gap the drop Y falls into
+            // Each node occupies [node.position.y, node.position.y + height]
+            // The midpoint between two nodes defines the boundary
+            for (let i = 0; i < sorted.length; i++) {
+                const nodeBottom = sorted[i].position.y + heights[i];
+                const nextTop = i < sorted.length - 1 ? sorted[i + 1].position.y : Infinity;
+                const boundary = (nodeBottom + nextTop) / 2;
+
+                // If drop is above this node's midpoint, insert before it
+                if (i === 0) {
+                    const nodeMiddle = sorted[0].position.y + heights[0] / 2;
+                    if (flowY < nodeMiddle) return 0;
+                }
+
+                // If drop is between this node and the next
+                if (flowY < boundary) return i + 1;
             }
 
-            const node = createNodeFromDrop(type, rawData, NODE_X, y);
-            if (!node) return;
-
-            insertNodeAt(index, node);
-            setIsDragging(false);
-            dragEnterCounter.current = 0;
+            return sorted.length;
         },
-        [state.nodes, insertNodeAt],
+        [state.nodes, reactFlow],
     );
 
-    /** Handle a drop on the canvas background (not on a drop zone). */
+    /** Handle drop on the canvas — determines insertion position from Y coordinate. */
     const onDrop = useCallback(
         (e: DragEvent) => {
             e.preventDefault();
+            isDraggingRef.current = false;
             setIsDragging(false);
-            dragEnterCounter.current = 0;
+            if (dragTimeoutRef.current) { clearTimeout(dragTimeoutRef.current); dragTimeoutRef.current = null; }
 
             if (!state.testName) return;
 
@@ -341,18 +432,21 @@ function BuilderPaneInner() {
             const rawData = e.dataTransfer.getData("application/testengine-data");
             if (!type) return;
 
-            // Convert screen position to flow position
-            const position = reactFlow.screenToFlowPosition({
-                x: e.clientX,
-                y: e.clientY,
-            });
-
-            const node = createNodeFromDrop(type, rawData, position.x, position.y);
+            const node = createNodeFromDrop(type, rawData, NODE_X, 0);
             if (!node) return;
 
-            appendNode(node);
+            // Convert screen position to flow position to determine insertion index
+            const flowPos = reactFlow.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+            const index = getInsertionIndex(flowPos.y);
+            const sorted = sortedByOrder(state.nodes);
+
+            if (index >= sorted.length) {
+                appendNode(node);
+            } else {
+                insertNodeAt(index, node);
+            }
         },
-        [state.testName, reactFlow, appendNode],
+        [state.testName, state.nodes, reactFlow, appendNode, insertNodeAt, getInsertionIndex],
     );
 
     // ─── Drop zone nodes ─────────────────────────────────────────────────────
@@ -360,56 +454,59 @@ function BuilderPaneInner() {
     const dropZoneNodes = useMemo((): Node[] => {
         if (!isDragging || state.nodes.length === 0) return [];
 
-        const sorted = sortedByY(state.nodes);
+        const sorted = sortedByOrder(state.nodes);
         const zones: Node[] = [];
+
+        // Read measured heights from ReactFlow internals
+        const heights: number[] = sorted.map((n) => {
+            const internal = reactFlow.getInternalNode(n.id);
+            return internal?.measured?.height ?? 80;
+        });
 
         // Zone above first node
         zones.push({
             id: "dz_0",
             type: "dropZone",
-            position: { x: NODE_X, y: sorted[0].position.y - NODE_SPACING / 2 - DROP_ZONE_HEIGHT / 2 },
-            data: {
-                nodeType: "dropZone",
-                insertionIndex: 0,
-                onDropAtIndex: handleDropAtIndex,
-            } satisfies DropZoneNodeData,
+            position: {
+                x: NODE_X,
+                y: sorted[0].position.y - NODE_GAP / 2 - DROP_ZONE_HEIGHT,
+            },
+            data: { nodeType: "dropZone", insertionIndex: 0 } satisfies DropZoneNodeData,
             selectable: false,
             draggable: false,
         });
 
         // Zones between consecutive nodes
         for (let i = 0; i < sorted.length - 1; i++) {
-            const midY = (sorted[i].position.y + sorted[i + 1].position.y) / 2;
+            const bottomOfCurrent = sorted[i].position.y + heights[i];
+            const topOfNext = sorted[i + 1].position.y;
+            const midY = (bottomOfCurrent + topOfNext) / 2;
             zones.push({
                 id: `dz_${i + 1}`,
                 type: "dropZone",
                 position: { x: NODE_X, y: midY - DROP_ZONE_HEIGHT / 2 },
-                data: {
-                    nodeType: "dropZone",
-                    insertionIndex: i + 1,
-                    onDropAtIndex: handleDropAtIndex,
-                } satisfies DropZoneNodeData,
+                data: { nodeType: "dropZone", insertionIndex: i + 1 } satisfies DropZoneNodeData,
                 selectable: false,
                 draggable: false,
             });
         }
 
         // Zone below last node
+        const lastIdx = sorted.length - 1;
         zones.push({
             id: `dz_${sorted.length}`,
             type: "dropZone",
-            position: { x: NODE_X, y: sorted[sorted.length - 1].position.y + NODE_SPACING / 2 + DROP_ZONE_HEIGHT / 2 },
-            data: {
-                nodeType: "dropZone",
-                insertionIndex: sorted.length,
-                onDropAtIndex: handleDropAtIndex,
-            } satisfies DropZoneNodeData,
+            position: {
+                x: NODE_X,
+                y: sorted[lastIdx].position.y + heights[lastIdx] + NODE_GAP / 2,
+            },
+            data: { nodeType: "dropZone", insertionIndex: sorted.length } satisfies DropZoneNodeData,
             selectable: false,
             draggable: false,
         });
 
         return zones;
-    }, [isDragging, state.nodes, handleDropAtIndex]);
+    }, [isDragging, state.nodes, reactFlow]);
 
     const displayNodes = useMemo(
         () => [...state.nodes, ...dropZoneNodes] as BuilderNode[],
@@ -597,18 +694,19 @@ function BuilderPaneInner() {
                 </Toolbar>
             </div>
 
-            <div className={styles.canvas}>
+            <div
+                className={styles.canvas}
+                onDragOver={onDragOver}
+                onDrop={onDrop}
+            >
                 <ReactFlow
                     nodes={displayNodes}
                     edges={state.edges}
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
-                    onDragOver={onDragOver}
-                    onDragEnter={onDragEnter}
-                    onDragLeave={onDragLeave}
-                    onDrop={onDrop}
                     nodeTypes={nodeTypes}
+                    nodesDraggable={false}
                     fitView
                     proOptions={{ hideAttribution: true }}
                 >

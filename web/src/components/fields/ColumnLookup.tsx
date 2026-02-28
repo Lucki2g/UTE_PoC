@@ -31,22 +31,33 @@ interface ColumnLookupProps {
     entityName: string;
     value: string;
     onChange: (logicalName: string) => void;
+    /** When set, only columns whose dataType or targetEntity matches this value are shown. */
+    filterDataType?: string;
 }
 
-export function ColumnLookup({ entityName, value, onChange }: ColumnLookupProps) {
+export function ColumnLookup({ entityName, value, onChange, filterDataType }: ColumnLookupProps) {
     const { columns, loading } = useEntityColumns(entityName);
     const [query, setQuery] = useState("");
     const styles = useStyles();
 
     const filtered = useMemo(() => {
-        if (!query) return columns;
+        let base = columns;
+        if (filterDataType) {
+            const ft = filterDataType.toLowerCase();
+            base = base.filter(
+                (c) =>
+                    c.dataType.replace("?", "").trim().toLowerCase() === ft ||
+                    c.targetEntity?.toLowerCase() === ft,
+            );
+        }
+        if (!query) return base;
         const q = query.toLowerCase();
-        return columns.filter(
+        return base.filter(
             (c) =>
                 c.logicalName.includes(q) ||
                 c.displayName?.toLowerCase().includes(q),
         );
-    }, [columns, query]);
+    }, [columns, query, filterDataType, entityName]);
 
     if (loading) {
         return <Spinner size="tiny" />;

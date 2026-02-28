@@ -224,9 +224,16 @@ export interface DslDraftEntity {
 }
 
 export interface DslDraftRule {
-    type: string;
-    attribute: string;
-    value: DslDraftValue;
+    /** "with" | "withDefault" | "ref" */
+    type: "with" | "withDefault" | "ref";
+    /** Attribute name — absent for type="ref" */
+    attribute?: string;
+    /** Value — absent for type="ref" */
+    value?: DslDraftValue;
+    /** For type="ref": the draft method to wrap */
+    draft?: string;
+    /** For type="ref": the variable alias (auto-derived if omitted) */
+    alias?: string;
 }
 
 export type DslDraftValue =
@@ -252,6 +259,8 @@ export interface DslDraftReferenceValue {
     self?: boolean;
     build: boolean;
     transform?: string;
+    /** When set, emit via the named Ref alias: () => {refAlias}.Value[.transform()] */
+    refAlias?: string;
 }
 
 // ─── DSL Field Value (used by Extensions) ───────────────────────────────────

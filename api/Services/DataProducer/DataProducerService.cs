@@ -44,6 +44,24 @@ public class DataProducerService : IDataProducerService
         return results;
     }
 
+    public async Task<ProducerMetadata?> GetProducerAsync(string entityName)
+    {
+        var filePath = FindProducerFile(entityName);
+        if (filePath == null) return null;
+
+        var code = await _fileManager.ReadFileAsync(filePath);
+        var decompileResult = await _producerDslCompiler.DecompileFromCSharpAsync(code);
+        var methodNames = decompileResult.Dsl.Drafts.Select(d => d.Id).ToList();
+
+        return new ProducerMetadata
+        {
+            EntityName = entityName,
+            FilePath = Path.GetRelativePath(_dataProducersPath, filePath),
+            MethodNames = methodNames,
+            Dsl = decompileResult.Dsl
+        };
+    }
+
     public async Task CreateProducerAsync(DslProducerDefinition dsl)
     {
         if (dsl.Drafts.Count == 0)

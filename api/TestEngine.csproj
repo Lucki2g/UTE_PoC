@@ -14,14 +14,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="data\" />
-    <Compile Remove="data\**" />
-    <Content Remove="data\**" />
-    <EmbeddedResource Remove="data\**" />
-    <None Remove="data\**" />
-  </ItemGroup>
-
-  <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>TestEngine.Tests</_Parameter1>
     </AssemblyAttribute>
@@ -32,6 +24,10 @@
     <Content Remove="TestEngine.Tests\**" />
     <EmbeddedResource Remove="TestEngine.Tests\**" />
     <None Remove="TestEngine.Tests\**" />
+    <Compile Remove="data\**" />
+    <Content Remove="data\**" />
+    <EmbeddedResource Remove="data\**" />
+    <None Remove="data\**" />
   </ItemGroup>
 
 </Project>

@@ -11,4 +11,6 @@ public class EntityColumnInfo
     public string? DisplayName { get; set; }
     public required string DataType { get; set; }
     public List<string>? EnumMembers { get; set; }
+    /// <summary>For EntityReference columns: the target entity logical name, if known.</summary>
+    public string? TargetEntity { get; set; }
 }

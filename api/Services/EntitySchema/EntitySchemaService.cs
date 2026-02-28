@@ -54,6 +54,20 @@ public class EntitySchemaService : IEntitySchemaService
             _enumCache[enumDecl.Identifier.Text] = members;
         }
 
+        // First pass: build map of C# class name → entity logical name
+        var classNameToEntityLogicalName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var classDecl in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+        {
+            var entityAttr = classDecl.AttributeLists
+                .SelectMany(al => al.Attributes)
+                .FirstOrDefault(a => a.Name.ToString() == "EntityLogicalName");
+            if (entityAttr is null) continue;
+            var entityName = GetAttributeStringArg(entityAttr);
+            if (entityName is not null)
+                classNameToEntityLogicalName[classDecl.Identifier.Text] = entityName;
+        }
+
+        // Second pass: process each entity class
         foreach (var classDecl in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
         {
             var entityAttr = classDecl.AttributeLists
@@ -67,6 +81,28 @@ public class EntitySchemaService : IEntitySchemaService
 
             var columns = new List<EntityColumnInfo>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // Build a map from attribute logical name → target entity logical name
+            // by finding navigation properties that have both [AttributeLogicalName] and
+            // [RelationshipSchemaName], whose return type is a known entity class.
+            var logicalNameToTargetEntity = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var prop in classDecl.Members.OfType<PropertyDeclarationSyntax>())
+            {
+                var attrs = prop.AttributeLists.SelectMany(al => al.Attributes).ToList();
+
+                if (!attrs.Any(a => a.Name.ToString() == "RelationshipSchemaName")) continue;
+
+                var logNameAttr = attrs.FirstOrDefault(a => a.Name.ToString() == "AttributeLogicalName");
+                if (logNameAttr is null) continue;
+
+                var logName = GetAttributeStringArg(logNameAttr);
+                if (logName is null) continue;
+
+                // Return type is the target entity class (e.g. ape_developer, ape_skill)
+                var returnTypeName = GetSimpleTypeName(prop.Type);
+                if (returnTypeName is not null && classNameToEntityLogicalName.TryGetValue(returnTypeName, out var targetEntityLogicalName))
+                    logicalNameToTargetEntity[logName] = targetEntityLogicalName;
+            }
 
             foreach (var prop in classDecl.Members.OfType<PropertyDeclarationSyntax>())
             {
@@ -86,17 +122,41 @@ public class EntitySchemaService : IEntitySchemaService
                 var dataType = prop.Type.ToString();
                 var enumTypeName = dataType.TrimEnd('?');
 
+                logicalNameToTargetEntity.TryGetValue(logicalName, out var targetEntity);
+
                 columns.Add(new EntityColumnInfo
                 {
                     LogicalName = logicalName,
                     DisplayName = displayNameAttr is not null ? GetAttributeStringArg(displayNameAttr) : null,
                     DataType = dataType,
                     EnumMembers = _enumCache.TryGetValue(enumTypeName, out var members) ? members : null,
+                    TargetEntity = targetEntity,
                 });
             }
 
             _cache[entityName] = columns;
         }
+    }
+
+    /// <summary>
+    /// Returns the simple (non-generic) type name from a property type syntax.
+    /// For IEnumerable&lt;Account&gt; returns "Account"; for Account returns "Account"; for Account? returns "Account".
+    /// </summary>
+    private static string? GetSimpleTypeName(TypeSyntax type)
+    {
+        // Unwrap nullable: Account?
+        if (type is NullableTypeSyntax nullable)
+            type = nullable.ElementType;
+
+        // Simple identifier: Account
+        if (type is IdentifierNameSyntax id)
+            return id.Identifier.Text;
+
+        // Generic: IEnumerable<Account>
+        if (type is GenericNameSyntax generic && generic.TypeArgumentList.Arguments.Count == 1)
+            return GetSimpleTypeName(generic.TypeArgumentList.Arguments[0]);
+
+        return null;
     }
 
     private static string? GetAttributeStringArg(AttributeSyntax attr)

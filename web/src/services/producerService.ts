@@ -7,6 +7,10 @@ export const producerService = {
         return api.get("/producers/");
     },
 
+    getByEntityName(entityName: string): Promise<ProducerMetadata> {
+        return api.get(`/producers/${encodeURIComponent(entityName)}`);
+    },
+
     create(request: CreateProducerRequest): Promise<string> {
         return api.put("/producers/", request);
     },

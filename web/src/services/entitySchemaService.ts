@@ -5,6 +5,8 @@ export interface EntityColumnInfo {
     displayName: string | null;
     dataType: string;
     enumMembers: string[] | null;
+    /** For EntityReference columns: the target entity logical name, if known. */
+    targetEntity: string | null;
 }
 
 const columnCache = new Map<string, EntityColumnInfo[]>();

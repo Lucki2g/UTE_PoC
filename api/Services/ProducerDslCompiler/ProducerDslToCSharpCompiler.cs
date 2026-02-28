@@ -37,75 +37,226 @@ internal class ProducerDslToCSharpCompiler
     private void EmitDraftMethod(StringBuilder sb, DslDraftDefinition draft, DslProducerDefinition definition)
     {
         var entity = draft.Entity.LogicalName;
-        var paramName = DeriveParamName(entity);
         var accessMod = draft.AccessModifier;
 
+        // Build alias map from explicit "ref" rules + auto-detect multi-use withDefault refs
+        var refAliases = BuildRefAliasMap(draft);
+
         // Method signature
-        sb.AppendLine($"    {accessMod} Draft<{entity}> {draft.Id}({entity}? {paramName} = null)");
+        sb.AppendLine($"    {accessMod} Draft<{entity}> {draft.Id}()");
         sb.AppendLine("    {");
 
-        // Null-coalescing instantiation
-        sb.AppendLine($"        {paramName} ??= new {entity}();");
-
-        if (draft.Rules.Count > 0)
-            sb.AppendLine();
-
-        // EnsureValue calls
-        foreach (var rule in draft.Rules)
+        // Emit Ref declarations (one per alias)
+        foreach (var (draftRef, alias) in refAliases)
         {
-            EmitRule(sb, rule, paramName, draft, definition);
+            sb.AppendLine($"        var {alias} = Ref({draftRef});");
         }
 
-        sb.AppendLine();
+        // Fluent chain — only With/WithDefault rules; ref rules are declarations already emitted
+        var fluentRules = draft.Rules.Where(r => r.Type is "with" or "withDefault").ToList();
 
-        // Return statement
-        sb.AppendLine($"        return new Draft<{entity}>(this, {paramName});");
+        if (refAliases.Count > 0 && fluentRules.Count > 0)
+            sb.AppendLine();
+
+        if (fluentRules.Count == 0)
+        {
+            if (refAliases.Count == 0)
+                sb.AppendLine($"        return new Draft<{entity}>(this);");
+            else
+                sb.AppendLine($"        return new Draft<{entity}>(this);");
+        }
+        else
+        {
+            sb.AppendLine($"        return new Draft<{entity}>(this)");
+
+            for (var i = 0; i < fluentRules.Count; i++)
+            {
+                var isLast = i == fluentRules.Count - 1;
+                EmitRuleFluentLine(sb, fluentRules[i], draft, refAliases, isLast);
+            }
+        }
+
         sb.AppendLine("    }");
     }
 
-    private void EmitRule(StringBuilder sb, DslDraftRule rule, string paramName,
-        DslDraftDefinition draft, DslProducerDefinition definition)
+    /// <summary>
+    /// Builds the ref alias map from:
+    /// 1. Explicit "ref" rules — use the rule's alias if provided, otherwise derive it.
+    /// 2. Auto-detected withDefault rules that share the same draft method (multi-use).
+    /// Returns: draftMethodName -> variable alias (e.g. "DraftValidB" -> "b").
+    /// </summary>
+    private static Dictionary<string, string> BuildRefAliasMap(DslDraftDefinition draft)
     {
-        var valueCode = CompileValue(rule.Value, draft, definition);
-        if (valueCode == null)
-            return;
+        var aliases = new Dictionary<string, string>();
 
-        switch (rule.Value)
+        // Explicit ref rules take priority
+        foreach (var rule in draft.Rules)
         {
-            case DslDraftReferenceValue:
-                // Reference uses lambda overload
-                sb.AppendLine($"        {paramName}.EnsureValue(");
-                sb.AppendLine($"            a => a.{rule.Attribute},");
-                sb.AppendLine($"            {valueCode});");
-                break;
-            default:
-                sb.AppendLine($"        {paramName}.EnsureValue(a => a.{rule.Attribute}, {valueCode});");
-                break;
+            if (rule.Type == "ref" && !string.IsNullOrEmpty(rule.Draft))
+            {
+                var alias = !string.IsNullOrEmpty(rule.Alias) ? rule.Alias : DeriveRefAlias(rule.Draft);
+                aliases[rule.Draft] = alias;
+            }
         }
+
+        // Auto-detect: withDefault rules that reference the same draft more than once
+        var refCounts = new Dictionary<string, int>();
+        foreach (var rule in draft.Rules)
+        {
+            if (rule.Type == "withDefault" && rule.Value is DslDraftReferenceValue refVal && !refVal.Self
+                && string.IsNullOrEmpty(refVal.RefAlias))
+            {
+                refCounts[refVal.Draft] = refCounts.GetValueOrDefault(refVal.Draft, 0) + 1;
+            }
+        }
+
+        foreach (var (draftMethod, count) in refCounts)
+        {
+            if (count > 1 && !aliases.ContainsKey(draftMethod))
+                aliases[draftMethod] = DeriveRefAlias(draftMethod);
+        }
+
+        return aliases;
     }
 
-    private string? CompileValue(DslDraftValue value, DslDraftDefinition draft, DslProducerDefinition definition)
+    private static string DeriveRefAlias(string draftMethodName)
     {
-        switch (value)
+        // DraftValidB -> b, DraftValidSkill -> skill, DraftValidRole -> role
+        var name = draftMethodName;
+        if (name.StartsWith("Draft", StringComparison.Ordinal))
+            name = name["Draft".Length..];
+        if (name.StartsWith("Valid", StringComparison.Ordinal))
+            name = name["Valid".Length..];
+        if (name.Length == 0) return "dep";
+        return char.ToLowerInvariant(name[0]) + name[1..];
+    }
+
+    private void EmitRuleFluentLine(StringBuilder sb, DslDraftRule rule, DslDraftDefinition draft,
+        Dictionary<string, string> refAliases, bool isLast)
+    {
+        var terminator = isLast ? ";" : "";
+        var entity = draft.Entity.LogicalName;
+        var paramAlias = DeriveParamName(entity);
+
+        switch (rule.Type)
         {
-            case DslDraftConstantValue constant:
-                return CompileConstant(constant);
+            case "with":
+                EmitWithLine(sb, rule, paramAlias, draft, terminator);
+                break;
 
-            case DslDraftEnumValue enumVal:
-                return $"{enumVal.EnumType}.{enumVal.Value}";
-
-            case DslDraftReferenceValue reference:
-                return CompileReference(reference, draft, definition);
+            case "withDefault":
+                EmitWithDefaultLine(sb, rule, paramAlias, draft, refAliases, terminator);
+                break;
 
             default:
                 _diagnostics.Add(new DslDiagnostic
                 {
                     Code = ProducerDslDiagnosticCodes.UnsupportedValueKind,
-                    Message = $"Unknown value kind '{value.Kind}' in draft '{draft.Id}'.",
+                    Message = $"Unknown rule type '{rule.Type}' in draft '{draft.Id}', treating as 'with'.",
                     Location = new DslDiagnosticLocation { Section = "rules" }
                 });
-                return null;
+                EmitWithLine(sb, rule, paramAlias, draft, terminator);
+                break;
         }
+    }
+
+    private void EmitWithLine(StringBuilder sb, DslDraftRule rule, string paramAlias,
+        DslDraftDefinition draft, string terminator)
+    {
+        if (rule.Value == null) return;
+        var valueCode = CompileValueExpression(rule.Value, draft);
+        if (valueCode == null) return;
+
+        sb.AppendLine($"            .With({paramAlias} => {paramAlias}.{rule.Attribute} = {valueCode}){terminator}");
+    }
+
+    private void EmitWithDefaultLine(StringBuilder sb, DslDraftRule rule, string paramAlias,
+        DslDraftDefinition draft, Dictionary<string, string> refAliases, string terminator)
+    {
+        if (rule.Value is DslDraftReferenceValue refVal)
+        {
+            if (refVal.Self)
+            {
+                var chain = BuildReferenceChain(refVal);
+                sb.AppendLine($"            .WithDefault({paramAlias} => {paramAlias}.{rule.Attribute}, () => {chain}){terminator}");
+                return;
+            }
+
+            // Explicit refAlias on the value — use it directly
+            if (!string.IsNullOrEmpty(refVal.RefAlias))
+            {
+                var chain = new StringBuilder();
+                chain.Append($"{refVal.RefAlias}.Value");
+                if (!string.IsNullOrEmpty(refVal.Transform))
+                    chain.Append($".{refVal.Transform}()");
+                sb.AppendLine($"            .WithDefault({paramAlias} => {paramAlias}.{rule.Attribute}, () => {chain}){terminator}");
+                return;
+            }
+
+            // Auto-detected multi-use ref alias
+            if (refAliases.TryGetValue(refVal.Draft, out var alias))
+            {
+                var chain = new StringBuilder();
+                chain.Append($"{alias}.Value");
+                if (!string.IsNullOrEmpty(refVal.Transform))
+                    chain.Append($".{refVal.Transform}()");
+                sb.AppendLine($"            .WithDefault({paramAlias} => {paramAlias}.{rule.Attribute}, () => {chain}){terminator}");
+                return;
+            }
+
+            // Single-use shorthand: .WithDefault(a => a.Bid, DraftValidB) implies .Build().ToEntityReference()
+            if (refVal.Build && refVal.Transform == "ToEntityReference")
+            {
+                sb.AppendLine($"            .WithDefault({paramAlias} => {paramAlias}.{rule.Attribute}, {refVal.Draft}){terminator}");
+                return;
+            }
+
+            // Full lambda form
+            var lambdaChain = BuildReferenceChain(refVal);
+            sb.AppendLine($"            .WithDefault({paramAlias} => {paramAlias}.{rule.Attribute}, () => {lambdaChain}){terminator}");
+        }
+        else
+        {
+            var valueCode = CompileValueExpression(rule.Value!, draft);
+            if (valueCode == null) return;
+            sb.AppendLine($"            .WithDefault({paramAlias} => {paramAlias}.{rule.Attribute}, () => {valueCode}){terminator}");
+        }
+    }
+
+    private static string BuildReferenceChain(DslDraftReferenceValue reference)
+    {
+        var chain = new StringBuilder();
+        chain.Append($"{reference.Draft}()");
+
+        if (reference.Build)
+            chain.Append(".Build()");
+
+        if (!string.IsNullOrEmpty(reference.Transform))
+            chain.Append($".{reference.Transform}()");
+
+        return chain.ToString();
+    }
+
+    private string? CompileValueExpression(DslDraftValue value, DslDraftDefinition draft)
+    {
+        return value switch
+        {
+            DslDraftConstantValue constant => CompileConstant(constant),
+            DslDraftEnumValue enumVal => $"{enumVal.EnumType}.{enumVal.Value}",
+            DslDraftReferenceValue reference => BuildReferenceChain(reference),
+            _ => EmitUnsupportedValue(value, draft)
+        };
+    }
+
+    private string? EmitUnsupportedValue(DslDraftValue value, DslDraftDefinition draft)
+    {
+        _diagnostics.Add(new DslDiagnostic
+        {
+            Code = ProducerDslDiagnosticCodes.UnsupportedValueKind,
+            Message = $"Unknown value kind '{value.Kind}' in draft '{draft.Id}'.",
+            Location = new DslDiagnosticLocation { Section = "rules" }
+        });
+        return null;
     }
 
     private static string CompileConstant(DslDraftConstantValue constant)
@@ -119,34 +270,8 @@ internal class ProducerDslToCSharpCompiler
         };
     }
 
-    private string CompileReference(DslDraftReferenceValue reference, DslDraftDefinition draft, DslProducerDefinition definition)
-    {
-        // Validate that referenced draft exists
-        if (!reference.Self && !definition.Drafts.Any(d => d.Id == reference.Draft))
-        {
-            _diagnostics.Add(new DslDiagnostic
-            {
-                Code = ProducerDslDiagnosticCodes.UnresolvedDraftReference,
-                Message = $"Draft '{draft.Id}' references unknown draft '{reference.Draft}'.",
-                Location = new DslDiagnosticLocation { Section = "rules", Hint = reference.Draft }
-            });
-        }
-
-        var chain = new StringBuilder();
-        chain.Append($"() => {reference.Draft}(null)");
-
-        if (reference.Build)
-            chain.Append(".Build()");
-
-        if (!string.IsNullOrEmpty(reference.Transform))
-            chain.Append($".{reference.Transform}()");
-
-        return chain.ToString();
-    }
-
     private void ValidateDsl(DslProducerDefinition definition)
     {
-        // Check for duplicate draft ids
         var ids = new HashSet<string>();
         foreach (var draft in definition.Drafts)
         {
@@ -160,22 +285,30 @@ internal class ProducerDslToCSharpCompiler
             }
         }
 
-        // Check self-reference declarations
         foreach (var draft in definition.Drafts)
         {
             foreach (var rule in draft.Rules)
             {
-                if (rule.Value is DslDraftReferenceValue refVal)
+                if (rule.Value is not DslDraftReferenceValue refVal) continue;
+
+                if (refVal.Draft == draft.Id && !refVal.Self)
                 {
-                    if (refVal.Draft == draft.Id && !refVal.Self)
+                    _diagnostics.Add(new DslDiagnostic
                     {
-                        _diagnostics.Add(new DslDiagnostic
-                        {
-                            Code = ProducerDslDiagnosticCodes.SelfReferenceMissing,
-                            Message = $"Draft '{draft.Id}' references itself but 'self' is not set to true.",
-                            Location = new DslDiagnosticLocation { Section = "rules" }
-                        });
-                    }
+                        Code = ProducerDslDiagnosticCodes.SelfReferenceMissing,
+                        Message = $"Draft '{draft.Id}' references itself but 'self' is not set to true.",
+                        Location = new DslDiagnosticLocation { Section = "rules" }
+                    });
+                }
+
+                if (!refVal.Self && !definition.Drafts.Any(d => d.Id == refVal.Draft))
+                {
+                    _diagnostics.Add(new DslDiagnostic
+                    {
+                        Code = ProducerDslDiagnosticCodes.UnresolvedDraftReference,
+                        Message = $"Draft '{draft.Id}' references unknown draft '{refVal.Draft}'.",
+                        Location = new DslDiagnosticLocation { Section = "rules", Hint = refVal.Draft }
+                    });
                 }
             }
         }
@@ -183,8 +316,6 @@ internal class ProducerDslToCSharpCompiler
 
     private static string DeriveParamName(string entityName)
     {
-        // Use a short conventional name based on the entity
-        // e.g., ape_skill -> skill, ape_developer -> developer
         var parts = entityName.Split('_');
         return parts.Length > 1 ? parts[^1] : entityName;
     }

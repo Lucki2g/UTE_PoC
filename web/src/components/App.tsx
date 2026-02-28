@@ -6,11 +6,28 @@ import {
     ExtensionProvider,
     MetadataProvider,
     BuilderProvider,
+    AppModeProvider,
 } from "../contexts/index.ts";
+import { useAppMode } from "../contexts/AppModeContext.tsx";
 import { Header } from "./Header.tsx";
 import { TestExplorer } from "./TestExplorer.tsx";
 import { BuilderPane } from "./BuilderPane.tsx";
+import { ProducerBuilderPane } from "./ProducerBuilderPane.tsx";
 import { ComponentExplorer } from "./ComponentExplorer.tsx";
+
+function AppBody() {
+    const { state } = useAppMode();
+    return (
+        <div className="app-body">
+            <TestExplorer />
+            {state.mode === "producerEditor"
+                ? <ProducerBuilderPane />
+                : <BuilderPane />
+            }
+            <ComponentExplorer />
+        </div>
+    );
+}
 
 export function App() {
     return (
@@ -21,14 +38,12 @@ export function App() {
                         <ProducerProvider>
                             <ExtensionProvider>
                                 <BuilderProvider>
-                                    <div className="app-layout">
-                                        <Header />
-                                        <div className="app-body">
-                                            <TestExplorer />
-                                            <BuilderPane />
-                                            <ComponentExplorer />
+                                    <AppModeProvider>
+                                        <div className="app-layout">
+                                            <Header />
+                                            <AppBody />
                                         </div>
-                                    </div>
+                                    </AppModeProvider>
                                 </BuilderProvider>
                             </ExtensionProvider>
                         </ProducerProvider>

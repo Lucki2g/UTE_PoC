@@ -47,18 +47,34 @@ public class DslDraftEntity
 }
 
 /// <summary>
-/// A single EnsureValue rule within a draft.
+/// A single rule within a draft.
+/// type: "with" maps to .With(a => a.Attr = value) — always applied.
+/// type: "withDefault" maps to .WithDefault(a => a.Attr, ...) — only if caller has not set it.
+/// type: "ref" declares: var {alias} = Ref({draft}); — no attribute or value.
 /// </summary>
 public class DslDraftRule
 {
+    /// <summary>"with" | "withDefault" | "ref"</summary>
     [JsonPropertyName("type")]
-    public string Type { get; set; } = "ensure";
+    public string Type { get; set; } = "with";
 
     [JsonPropertyName("attribute")]
-    public required string Attribute { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Attribute { get; set; }
 
     [JsonPropertyName("value")]
-    public required DslDraftValue Value { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DslDraftValue? Value { get; set; }
+
+    /// <summary>For type="ref": the draft method to wrap, e.g. "DraftValidB".</summary>
+    [JsonPropertyName("draft")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Draft { get; set; }
+
+    /// <summary>For type="ref": the variable alias, e.g. "b". Auto-derived if omitted.</summary>
+    [JsonPropertyName("alias")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Alias { get; set; }
 }
 
 /// <summary>
@@ -109,6 +125,14 @@ public class DslDraftReferenceValue : DslDraftValue
 
     [JsonPropertyName("transform")]
     public string? Transform { get; set; }
+
+    /// <summary>
+    /// When set, the compiler emits this reference via the named Ref alias: () => {refAlias}.Value[.Transform()].
+    /// Must match the alias declared by a "ref" rule in the same draft.
+    /// </summary>
+    [JsonPropertyName("refAlias")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RefAlias { get; set; }
 }
 
 /// <summary>

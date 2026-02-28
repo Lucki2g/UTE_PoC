@@ -14,6 +14,10 @@ public static class DataProducerController
             .WithName("GetAllProducers")
             .WithDescription("List all existing producers in DSL format for frontend display");
 
+        group.MapGet("/{entityName}", GetProducer)
+            .WithName("GetProducer")
+            .WithDescription("Get a single producer by entity name");
+
         group.MapPut("/", CreateProducer)
             .WithName("CreateProducer")
             .WithDescription("Create a new DataProducer.<EntityName>.cs partial class from DSL");
@@ -33,6 +37,21 @@ public static class DataProducerController
         catch (NotImplementedException ex)
         {
             return Results.Problem($"Not implemented: {ex.Message}", statusCode: 501);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Internal error: {ex.Message}");
+        }
+    }
+
+    private static async Task<IResult> GetProducer(string entityName, IDataProducerService dataProducerService)
+    {
+        try
+        {
+            var producer = await dataProducerService.GetProducerAsync(entityName);
+            if (producer == null)
+                return Results.NotFound($"Not found: producer for entity '{entityName}'");
+            return Results.Ok(producer);
         }
         catch (Exception ex)
         {

@@ -28,7 +28,7 @@ const useStyles = makeStyles({
         backgroundColor: tokens.colorNeutralBackground1,
         border: `1px solid ${tokens.colorNeutralStroke2}`,
         borderRadius: tokens.borderRadiusLarge,
-        width: "280px",
+        width: "480px",
         boxShadow: tokens.shadow4,
     },
     selected: {

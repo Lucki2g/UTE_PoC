@@ -23,22 +23,20 @@ import {
     type SelectTabEvent,
 } from "@fluentui/react-components";
 import {
-    EditRegular,
-    FlashRegular,
-    FilterRegular,
+    AddRegular,
     MoreHorizontalRegular,
     FolderRegular,
     FolderAddRegular,
     BoxEditRegular,
+    BoxRegular,
 } from "@fluentui/react-icons";
 import { useProducers } from "../hooks/useProducers.ts";
-import { useExtensions } from "../hooks/useExtensions.ts";
 import { useAppMode } from "../contexts/AppModeContext.tsx";
 import dataproducerIcon from "../assets/dataproducer-icon.svg";
 import dataverseserviceIcon from "../assets/dataverseservice-icon.svg";
 import assertIcon from "../assets/assert-icon.svg";
 
-type TabValue = "producers" | "extensions" | "misc";
+type TabValue = "producers" | "misc";
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
@@ -290,45 +288,6 @@ function ProducersTab() {
     );
 }
 
-function ExtensionsTab() {
-    const styles = useStyles();
-    const { extensions, loading, fetchAll } = useExtensions();
-
-    useEffect(() => {
-        fetchAll();
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    if (loading) return <Spinner size="small" label="Loading extensions..." />;
-
-    return (
-        <div>
-            <div
-                className={styles.item}
-                draggable
-                onDragStart={(e) => onDragStart(e, "with", "")}
-            >
-                <EditRegular fontSize={20} />
-                <Text size={200}>With Block</Text>
-            </div>
-            {extensions.map((ext) =>
-                ext.methods.map((m) => (
-                    <div
-                        key={`${ext.entityName}.${m.name}`}
-                        className={styles.item}
-                        draggable
-                        onDragStart={(e) =>
-                            onDragStart(e, "extension", JSON.stringify({ entity: ext.entityName, method: m }))
-                        }
-                    >
-                        <FlashRegular fontSize={20} />
-                        <Text size={200} title={m.signature}>{m.name}</Text>
-                    </div>
-                )),
-            )}
-        </div>
-    );
-}
-
 function MiscTab() {
     const styles = useStyles();
     const assertBlocks = [
@@ -339,6 +298,16 @@ function MiscTab() {
 
     return (
         <div>
+            {/* Producer node rules — only With is supported inside a test */}
+            <div
+                className={styles.item}
+                draggable
+                onDragStart={(e) => onDragStart(e, "with", "")}
+            >
+                <AddRegular fontSize={20} />
+                <Text size={200}>+With</Text>
+            </div>
+
             <div
                 className={styles.item}
                 draggable
@@ -383,8 +352,7 @@ export function ComponentExplorer() {
                 onTabSelect={onTabSelect}
                 size="small"
             >
-                <Tab value="producers" icon={<FilterRegular />}>Producers</Tab>
-                <Tab value="extensions" icon={<FlashRegular />}>Extensions</Tab>
+                <Tab value="producers" icon={<BoxRegular />}>Producers</Tab>
                 <Tab value="misc" icon={<MoreHorizontalRegular />}>Misc</Tab>
             </TabList>
 
@@ -392,7 +360,6 @@ export function ComponentExplorer() {
                 ? <ProducersTab />
                 : (
                     <div className={styles.content}>
-                        {activeTab === "extensions" && <ExtensionsTab />}
                         {activeTab === "misc" && <MiscTab />}
                     </div>
                 )

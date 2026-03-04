@@ -73,8 +73,8 @@ const useStyles = makeStyles({
         border: `1px solid ${tokens.colorNeutralStroke2}`,
     },
     refRule: {
-        backgroundColor: tokens.colorPaletteTealBackground1,
-        borderColor: tokens.colorPaletteTealBorderActive,
+        backgroundColor: tokens.colorPaletteTealBackground2,
+        borderColor: tokens.colorPaletteTealBorderActive as string as never,
     },
     ruleType: {
         minWidth: "100px",
@@ -269,44 +269,44 @@ export function ProducerDraftNode({ draft, selected, onChange, onDelete }: Produ
                 {[...draft.rules.map((rule, i) => ({ rule, i }))]
                     .sort((a, b) => (a.rule.type === "ref" ? 0 : 1) - (b.rule.type === "ref" ? 0 : 1))
                     .map(({ rule, i }) => {
-                    if (rule.type === "ref") {
+                        if (rule.type === "ref") {
+                            return (
+                                <RefRuleRow
+                                    key={i}
+                                    rule={rule}
+                                    allProducerDrafts={allProducerDrafts}
+                                    styles={styles}
+                                    onChange={(updates) => updateRule(i, updates)}
+                                    onDelete={() => removeRule(i)}
+                                />
+                            );
+                        }
+
+                        const col = getColumnInfo(rule.attribute ?? "");
+                        const isEnum = !!(col?.enumMembers && col.enumMembers.length > 0);
+                        const isEntityRef = !isEnum && isEntityRefType(col?.dataType);
+                        const targetEntity = col?.targetEntity ?? null;
+
                         return (
-                            <RefRuleRow
+                            <WithRuleRow
                                 key={i}
                                 rule={rule}
+                                draftEntityName={draft.entity.logicalName}
+                                col={col}
+                                isEnum={isEnum}
+                                isEntityRef={isEntityRef}
+                                targetEntity={targetEntity}
                                 allProducerDrafts={allProducerDrafts}
+                                declaredRefs={declaredRefs}
                                 styles={styles}
-                                onChange={(updates) => updateRule(i, updates)}
+                                onTypeChange={(type) => updateRule(i, { type: type as "with" | "withDefault" })}
+                                onAttributeChange={(attr) => onAttributeChange(i, attr)}
+                                onValueKindChange={(kind) => onValueKindChange(i, kind)}
+                                onValueChange={(value) => updateRule(i, { value })}
                                 onDelete={() => removeRule(i)}
                             />
                         );
-                    }
-
-                    const col = getColumnInfo(rule.attribute ?? "");
-                    const isEnum = !!(col?.enumMembers && col.enumMembers.length > 0);
-                    const isEntityRef = !isEnum && isEntityRefType(col?.dataType);
-                    const targetEntity = col?.targetEntity ?? null;
-
-                    return (
-                        <WithRuleRow
-                            key={i}
-                            rule={rule}
-                            draftEntityName={draft.entity.logicalName}
-                            col={col}
-                            isEnum={isEnum}
-                            isEntityRef={isEntityRef}
-                            targetEntity={targetEntity}
-                            allProducerDrafts={allProducerDrafts}
-                            declaredRefs={declaredRefs}
-                            styles={styles}
-                            onTypeChange={(type) => updateRule(i, { type: type as "with" | "withDefault" })}
-                            onAttributeChange={(attr) => onAttributeChange(i, attr)}
-                            onValueKindChange={(kind) => onValueKindChange(i, kind)}
-                            onValueChange={(value) => updateRule(i, { value })}
-                            onDelete={() => removeRule(i)}
-                        />
-                    );
-                })}
+                    })}
 
                 <div className={styles.addRow}>
                     <Button size="small" appearance="subtle" icon={<AddRegular />} onClick={() => addRule("with")}>With</Button>
@@ -497,9 +497,7 @@ function WithRuleRow({
                         {declaredRefs.length > 0 && (
                             <OptionGroup label="Refs">
                                 {declaredRefs.map((r) => (
-                                    <Option key={`ref:${r.alias}`} value={`ref:${r.alias}`}>
-                                        {r.alias} ({r.entityName})
-                                    </Option>
+                                    <Option key={`ref:${r.alias}`} value={`ref:${r.alias}`} text={`${r.alias} (${r.entityName})`} />
                                 ))}
                             </OptionGroup>
                         )}

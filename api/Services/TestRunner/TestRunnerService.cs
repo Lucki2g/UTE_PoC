@@ -1,5 +1,6 @@
 using CliWrap;
 using CliWrap.Buffered;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using TestEngine.Models.Responses;
 
@@ -10,75 +11,172 @@ public class TestRunnerService : ITestRunnerService
     private readonly string _repositoryPath;
     private readonly string _testProjectPath;
 
+    // Prevent concurrent dotnet test invocations — they share the same build output directory
+    private static readonly SemaphoreSlim _runLock = new(1, 1);
+
     public TestRunnerService(TestProjectPaths paths)
     {
         _repositoryPath = paths.RepositoryPath;
         _testProjectPath = paths.TestProjectPath;
     }
 
+    // Extra MSBuild properties appended to every dotnet-test invocation.
+    // Suppresses common auto-generated-file warnings/errors that are not ours to fix.
+    // Semicolons must be percent-encoded (%3B) when passed via the dotnet CLI to avoid
+    // them being treated as argument separators by MSBuild argument parsing.
+    private static readonly string[] _noWarnArgs =
+    [
+        "-p:TreatWarningsAsErrors=false",
+    ];
+
+    private static bool IsBuildError(string consoleOutput) =>
+        consoleOutput.Contains("error CS") || consoleOutput.Contains("Build FAILED") ||
+        consoleOutput.Contains("could not be found");
+
     public async Task<TestRunResult> RunTestAsync(string testName)
     {
         if (string.IsNullOrWhiteSpace(testName))
-        {
             throw new ArgumentException("Test name cannot be empty", nameof(testName));
+
+        if (!await _runLock.WaitAsync(0))
+        {
+            return new TestRunResult
+            {
+                TestName = testName,
+                Passed = false,
+                Duration = "0s",
+                BuildError = "Another test run is already in progress. Please wait for it to finish."
+            };
         }
 
         var resultsFile = Path.Combine(Path.GetTempPath(), $"testresults_{Guid.NewGuid()}.trx");
-
         try
         {
-            // Run the specific test
             var result = await Cli.Wrap("dotnet")
                 .WithArguments([
                     "test",
                     "--filter", $"FullyQualifiedName~{testName}",
-                    "--logger", $"trx;LogFileName={resultsFile}"
+                    "--logger", $"trx;LogFileName={resultsFile}",
+                    .. _noWarnArgs,
                 ])
                 .WithWorkingDirectory(_testProjectPath)
                 .WithValidation(CommandResultValidation.None)
                 .ExecuteBufferedAsync();
 
-            var parsed = ParseTrxResult(resultsFile, result.StandardOutput + result.StandardError);
+            var consoleOutput = result.StandardOutput + result.StandardError;
+
+            if (!File.Exists(resultsFile) && IsBuildError(consoleOutput))
+            {
+                return new TestRunResult
+                {
+                    TestName = testName,
+                    Passed = false,
+                    Duration = "0s",
+                    BuildError = consoleOutput,
+                };
+            }
+
+            var parsed = ParseTrxResult(resultsFile, consoleOutput);
             parsed.TestName = testName;
             return parsed;
         }
-        catch (Exception e)
-        {
-            throw new FileNotFoundException($"Failed to build or run testcase at {_testProjectPath}/{testName}");
-        }
         finally
         {
-            if (File.Exists(resultsFile))
-            {
-                File.Delete(resultsFile);
-            }
+            _runLock.Release();
+            if (File.Exists(resultsFile)) File.Delete(resultsFile);
         }
     }
 
     public async Task<TestRunAllResult> RunAllTestsAsync()
     {
-        var resultsFile = Path.Combine(Path.GetTempPath(), $"testresults_{Guid.NewGuid()}.trx");
+        if (!await _runLock.WaitAsync(0))
+        {
+            return new TestRunAllResult
+            {
+                Results = [],
+                BuildError = "Another test run is already in progress. Please wait for it to finish."
+            };
+        }
 
+        var resultsFile = Path.Combine(Path.GetTempPath(), $"testresults_{Guid.NewGuid()}.trx");
         try
         {
-            // Run all tests
             var result = await Cli.Wrap("dotnet")
                 .WithArguments([
                     "test",
-                    "--logger", $"trx;LogFileName={resultsFile}"
+                    "--logger", $"trx;LogFileName={resultsFile}",
+                    .. _noWarnArgs,
                 ])
                 .WithWorkingDirectory(_testProjectPath)
                 .WithValidation(CommandResultValidation.None)
                 .ExecuteBufferedAsync();
 
-            return ParseTrxAllResults(resultsFile, result.StandardOutput + result.StandardError);
+            var consoleOutput = result.StandardOutput + result.StandardError;
+
+            if (!File.Exists(resultsFile) && IsBuildError(consoleOutput))
+            {
+                return new TestRunAllResult
+                {
+                    Results = [],
+                    BuildError = consoleOutput,
+                };
+            }
+
+            return ParseTrxAllResults(resultsFile, consoleOutput);
         }
         finally
         {
-            if (File.Exists(resultsFile))
+            _runLock.Release();
+            if (File.Exists(resultsFile)) File.Delete(resultsFile);
+        }
+    }
+
+    public async Task<TestRunAllResult> RunSubsetAsync(string filter)
+    {
+        if (string.IsNullOrWhiteSpace(filter))
+            throw new ArgumentException("Filter cannot be empty", nameof(filter));
+
+        if (!await _runLock.WaitAsync(0))
+        {
+            return new TestRunAllResult
             {
-                File.Delete(resultsFile);
+                Results = [],
+                BuildError = "Another test run is already in progress. Please wait for it to finish."
+            };
+        }
+
+        var resultsFile = Path.Combine(Path.GetTempPath(), $"testresults_{Guid.NewGuid()}.trx");
+        try
+        {
+            // Use FullyQualifiedName~ to match class name or namespace prefix
+            var result = await Cli.Wrap("dotnet")
+                .WithArguments([
+                    "test",
+                    "--filter", $"FullyQualifiedName~{filter}",
+                    "--logger", $"trx;LogFileName={resultsFile}",
+                    .. _noWarnArgs,
+                ])
+                .WithWorkingDirectory(_testProjectPath)
+                .WithValidation(CommandResultValidation.None)
+                .ExecuteBufferedAsync();
+
+            var consoleOutput = result.StandardOutput + result.StandardError;
+
+            if (!File.Exists(resultsFile) && IsBuildError(consoleOutput))
+            {
+                return new TestRunAllResult
+                {
+                    Results = [],
+                    BuildError = consoleOutput,
+                };
             }
+
+            return ParseTrxAllResults(resultsFile, consoleOutput);
+        }
+        finally
+        {
+            _runLock.Release();
+            if (File.Exists(resultsFile)) File.Delete(resultsFile);
         }
     }
 
@@ -136,6 +234,9 @@ public class TestRunnerService : ITestRunnerService
 
         if (!File.Exists(trxFilePath))
         {
+            // No TRX produced — surface whatever the CLI printed so the user can see it
+            if (!string.IsNullOrWhiteSpace(consoleOutput))
+                result.BuildError = consoleOutput;
             return result;
         }
 
@@ -162,6 +263,10 @@ public class TestRunnerService : ITestRunnerService
 
         var unitTestResults = doc.Descendants(ns + "UnitTestResult").ToList();
         result.Total = unitTestResults.Count;
+
+        // No tests matched — surface CLI output so the user knows what happened
+        if (result.Total == 0 && !string.IsNullOrWhiteSpace(consoleOutput))
+            result.BuildError = consoleOutput;
 
         foreach (var unitTestResult in unitTestResults)
         {

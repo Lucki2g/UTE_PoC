@@ -81,7 +81,7 @@ const useStyles = makeStyles({
         cursor: "pointer",
         "&:hover": {
             backgroundColor: tokens.colorBrandBackgroundHover,
-            borderColor: tokens.colorNeutralForegroundOnBrand,
+            borderColor: tokens.colorNeutralForegroundOnBrand as string as never,
         },
     },
     svgIcon: {
@@ -113,7 +113,7 @@ const useStyles = makeStyles({
 
 const phaseLabels: Record<NonNullable<SyncPhase>, { label: string; step: number }> = {
     xrmContext: { label: "Generating C# entity classes", step: 1 },
-    metadata: { label: "Generating TypeScript metadata", step: 2 },
+    metadata: { label: "Generating C# test metadata", step: 2 },
     workflows: { label: "Downloading workflow files", step: 3 },
 };
 

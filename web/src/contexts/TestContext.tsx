@@ -11,6 +11,7 @@ interface TestState {
     loading: boolean;
     running: boolean;
     error: string | null;
+    buildError: string | null;
 }
 
 const initialState: TestState = {
@@ -21,6 +22,7 @@ const initialState: TestState = {
     loading: false,
     running: false,
     error: null,
+    buildError: null,
 };
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
@@ -36,6 +38,8 @@ type TestAction =
     | { type: "SELECT_TEST"; payload: string | null }
     | { type: "SET_ERROR"; payload: string }
     | { type: "CLEAR_ERROR" }
+    | { type: "SET_BUILD_ERROR"; payload: string }
+    | { type: "CLEAR_BUILD_ERROR" }
     | { type: "DONE_RUNNING" };
 
 function testReducer(state: TestState, action: TestAction): TestState {
@@ -67,14 +71,10 @@ function testReducer(state: TestState, action: TestAction): TestState {
         }
         case "SET_ALL_RESULTS": {
             const next = new Map(state.results);
-            const nowRunning = new Set(state.runningTests);
             for (const r of action.payload) {
-                if (r.testName) {
-                    next.set(r.testName, r);
-                    nowRunning.delete(r.testName);
-                }
+                if (r.testName) next.set(r.testName, r);
             }
-            return { ...state, running: false, runningTests: nowRunning, results: next, error: null };
+            return { ...state, running: false, runningTests: new Set(), results: next, error: null };
         }
         case "SELECT_TEST":
             return { ...state, selectedTest: action.payload };
@@ -82,6 +82,10 @@ function testReducer(state: TestState, action: TestAction): TestState {
             return { ...state, loading: false, running: false, runningTests: new Set(), error: action.payload };
         case "CLEAR_ERROR":
             return { ...state, error: null };
+        case "SET_BUILD_ERROR":
+            return { ...state, loading: false, running: false, runningTests: new Set(), buildError: action.payload };
+        case "CLEAR_BUILD_ERROR":
+            return { ...state, buildError: null };
         case "DONE_RUNNING":
             return { ...state, running: false, runningTests: new Set() };
     }

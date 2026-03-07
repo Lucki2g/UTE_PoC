@@ -180,11 +180,41 @@ const useStyles = makeStyles({
         flex: 1,
         display: "block",
     },
+    nodeCount: {
+        flexShrink: 0,
+        color: tokens.colorNeutralForeground3,
+        whiteSpace: "nowrap",
+    },
     actionButtons: {
         display: "flex",
         marginLeft: "auto",
         flexShrink: 0,
         gap: "2px",
+    },
+    buildErrorPanel: {
+        borderTop: `1px solid ${tokens.colorPaletteRedBorder2}`,
+        backgroundColor: tokens.colorPaletteRedBackground1,
+        flexShrink: 0,
+        maxHeight: "200px",
+        display: "flex",
+        flexDirection: "column",
+    },
+    buildErrorHeader: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
+        borderBottom: `1px solid ${tokens.colorPaletteRedBorder2}`,
+    },
+    buildErrorText: {
+        margin: 0,
+        padding: tokens.spacingHorizontalS,
+        fontSize: tokens.fontSizeBase100,
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-all",
+        color: tokens.colorPaletteRedForeground1,
+        overflowY: "auto",
+        flex: 1,
     },
     results: {
         borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
@@ -258,21 +288,25 @@ function TestTreeItem({
     node,
     results,
     runningTests,
+    anyRunning,
     expanded,
     selected,
     onToggle,
     onSelect,
     onRun,
+    onRunSubset,
     onOpen,
 }: {
     node: TestTreeNode;
     results: Map<string, TestRunResult>;
     runningTests: Set<string>;
+    anyRunning: boolean;
     expanded: Set<string>;
     selected: string | null;
     onToggle: (path: string) => void;
     onSelect: (path: string) => void;
     onRun: (testName: string) => void;
+    onRunSubset: (filter: string) => void;
     onOpen: (test: TestMetadata) => void;
 }) {
     const styles = useStyles();
@@ -280,8 +314,10 @@ function TestTreeItem({
     const hasChildren = node.children.length > 0;
     const isMethod = !!node.method;
     const isFolder = !node.test && !node.method;
+    const isClass = !!node.test && !node.method;
     const status = getAggregateStatus(node, results, runningTests);
     const isSelected = selected === node.fullPath;
+    const totalMethods = hasChildren ? countAllMethods(node) : 0;
 
     return (
         <TreeItem
@@ -299,8 +335,6 @@ function TestTreeItem({
                 onDoubleClick={() => {
                     if (node.method && node.test) {
                         onRun(`${node.test.className}.${node.method}`);
-                    } else if (node.test) {
-                        onOpen(node.test);
                     }
                 }}
                 style={{
@@ -310,9 +344,40 @@ function TestTreeItem({
             >
                 <div className={styles.nodeRow}>
                     <Tooltip content={node.fullPath} relationship="label" withArrow>
-                        <Text size={200} className={styles.nodeLabel}>{node.label}{hasChildren ? ` [${node.children.length}]` : ""}</Text>
+                        <Text size={200} className={styles.nodeLabel}>{node.label}</Text>
                     </Tooltip>
+                    {hasChildren && (
+                        <Text size={200} className={styles.nodeCount}>[{totalMethods}]</Text>
+                    )}
                     <div className={styles.actionButtons}>
+                        {/* Folder: run all tests under this folder path */}
+                        {isFolder && (
+                            <Button
+                                appearance="subtle"
+                                size="small"
+                                icon={<PlayFilled className={styles.playIcon} />}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRunSubset(node.fullPath);
+                                }}
+                                disabled={anyRunning}
+                                title="Run folder"
+                            />
+                        )}
+                        {/* Class: run all methods in this class */}
+                        {isClass && node.test && (
+                            <Button
+                                appearance="subtle"
+                                size="small"
+                                icon={<PlayFilled className={styles.playIcon} />}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRunSubset(node.test!.className);
+                                }}
+                                disabled={anyRunning}
+                                title="Run class"
+                            />
+                        )}
                         {isMethod && node.test && (
                             <Button
                                 appearance="subtle"
@@ -322,7 +387,7 @@ function TestTreeItem({
                                     e.stopPropagation();
                                     onRun(`${node.test!.className}.${node.method!}`);
                                 }}
-                                disabled={status === "running"}
+                                disabled={anyRunning}
                                 title="Run test"
                             />
                         )}
@@ -350,11 +415,13 @@ function TestTreeItem({
                             node={child}
                             results={results}
                             runningTests={runningTests}
+                            anyRunning={anyRunning}
                             expanded={expanded}
                             selected={selected}
                             onToggle={onToggle}
                             onSelect={onSelect}
                             onRun={onRun}
+                            onRunSubset={onRunSubset}
                             onOpen={onOpen}
                         />
                     ))}
@@ -378,6 +445,12 @@ function findNode(nodes: TestTreeNode[], path: string): TestTreeNode | undefined
 function collectMethodPaths(node: TestTreeNode): string[] {
     if (node.method) return [node.fullPath];
     return node.children.flatMap(collectMethodPaths);
+}
+
+/** Count all leaf test methods recursively under a node */
+function countAllMethods(node: TestTreeNode): number {
+    if (node.method) return 1;
+    return node.children.reduce((sum, child) => sum + countAllMethods(child), 0);
 }
 
 // ─── Results Panel ───────────────────────────────────────────────────────────
@@ -475,6 +548,10 @@ export function TestExplorer() {
         tests.run({ testName });
     };
 
+    const handleRunSubset = (filter: string) => {
+        tests.runSubset(filter);
+    };
+
     const openTestDiagram = useCallback((test: TestMetadata) => {
         if (test.dsl) {
             const diagram = loadDslToDiagram(test.dsl, test.className);
@@ -527,7 +604,7 @@ export function TestExplorer() {
                         size="small"
                         icon={<PlayFilled className={styles.playIcon} />}
                         onClick={() => tests.runAll()}
-                        disabled={tests.running}
+                        disabled={tests.running || tests.runningTests.size > 0}
                     />
                 </div>
             </div>
@@ -556,11 +633,13 @@ export function TestExplorer() {
                                 node={node}
                                 results={tests.results}
                                 runningTests={tests.runningTests}
+                                anyRunning={tests.running || tests.runningTests.size > 0}
                                 expanded={expanded}
                                 selected={tests.selectedTest}
                                 onToggle={toggleExpand}
                                 onSelect={tests.selectTest}
                                 onRun={handleRun}
+                                onRunSubset={handleRunSubset}
                                 onOpen={handleOpenTest}
                             />
                         ))}
@@ -572,6 +651,17 @@ export function TestExplorer() {
                     </Tree>
                 )}
             </div>
+
+            {/* BUILD/RUN ERROR DETAIL */}
+            {tests.buildError && (
+                <div className={styles.buildErrorPanel}>
+                    <div className={styles.buildErrorHeader}>
+                        <Text size={200} weight="semibold">Build output</Text>
+                        <Button appearance="transparent" size="small" onClick={tests.clearBuildError}>Dismiss</Button>
+                    </div>
+                    <pre className={styles.buildErrorText}>{tests.buildError}</pre>
+                </div>
+            )}
 
             {/* RESULTS DETAIL PANEL */}
             {tests.selectedTest && (

@@ -53,6 +53,10 @@ export interface RunTestRequest {
     testName: string;
 }
 
+export interface RunSubsetRequest {
+    filter: string;
+}
+
 // ─── Producer Requests ───────────────────────────────────────────────────────
 
 export interface CreateProducerRequest {

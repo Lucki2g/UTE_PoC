@@ -25,6 +25,7 @@ export interface TestRunResult {
     duration: string;
     trace?: string;
     errorMessage?: string;
+    buildError?: string;
 }
 
 export interface TestRunAllResult {
@@ -32,6 +33,7 @@ export interface TestRunAllResult {
     passed: number;
     failed: number;
     results: TestRunResult[];
+    buildError?: string;
 }
 
 export interface TestMetadata {

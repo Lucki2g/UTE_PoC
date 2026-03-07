@@ -4,6 +4,7 @@ import type {
     UpdateTestRequest,
     DeleteTestRequest,
     RunTestRequest,
+    RunSubsetRequest,
 } from "../models/requests.ts";
 import type { TestMetadata, TestRunResult, TestRunAllResult } from "../models/responses.ts";
 
@@ -30,5 +31,9 @@ export const testService = {
 
     runAll(): Promise<TestRunAllResult> {
         return api.post("/tests/run/all");
+    },
+
+    runSubset(request: RunSubsetRequest): Promise<TestRunAllResult> {
+        return api.post("/tests/run/subset", request);
     },
 };

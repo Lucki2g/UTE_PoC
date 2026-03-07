@@ -7,6 +7,7 @@ import type {
     UpdateTestRequest,
     DeleteTestRequest,
     RunTestRequest,
+    RunSubsetRequest,
 } from "../models/requests.ts";
 
 export function useTests() {
@@ -15,6 +16,10 @@ export function useTests() {
     const handleError = useCallback((err: unknown) => {
         const message = err instanceof ApiError ? err.body || err.message : String(err);
         dispatch({ type: "SET_ERROR", payload: message });
+    }, [dispatch]);
+
+    const handleBuildError = useCallback((output: string) => {
+        dispatch({ type: "SET_BUILD_ERROR", payload: output });
     }, [dispatch]);
 
     const fetchAll = useCallback(async () => {
@@ -62,13 +67,18 @@ export function useTests() {
         try {
             const result = await testService.run(request);
             if (!result.testName) result.testName = request.testName;
+            if (result.buildError) {
+                handleBuildError(result.buildError);
+                return undefined;
+            }
             dispatch({ type: "SET_RESULT", payload: result });
             return result;
         } catch (err) {
+            dispatch({ type: "DONE_RUNNING" });
             handleError(err);
             return undefined;
         }
-    }, [dispatch, handleError]);
+    }, [dispatch, handleError, handleBuildError]);
 
     const runAll = useCallback(async () => {
         const allTestNames = state.tests.flatMap((t) =>
@@ -77,13 +87,45 @@ export function useTests() {
         dispatch({ type: "RUNNING_TESTS", payload: allTestNames });
         try {
             const result = await testService.runAll();
+            if (result.buildError) {
+                handleBuildError(result.buildError);
+                return undefined;
+            }
             dispatch({ type: "SET_ALL_RESULTS", payload: result.results });
             return result;
         } catch (err) {
+            dispatch({ type: "DONE_RUNNING" });
             handleError(err);
             return undefined;
         }
-    }, [dispatch, handleError, state.tests]);
+    }, [dispatch, handleError, handleBuildError, state.tests]);
+
+    const runSubset = useCallback(async (filter: string) => {
+        // Collect test names matching the filter (folder path prefix or class name)
+        const matchingNames = state.tests
+            .filter((t) => {
+                const normalized = t.filePath.replace(/\\/g, "/");
+                const folderPath = normalized.split("/").slice(0, -1).join("/");
+                return folderPath.startsWith(filter) || t.className === filter || folderPath === filter;
+            })
+            .flatMap((t) => t.methodNames.map((m) => `${t.className}.${m}`));
+        if (matchingNames.length === 0) return undefined;
+        dispatch({ type: "RUNNING_TESTS", payload: matchingNames });
+        try {
+            const request: RunSubsetRequest = { filter };
+            const result = await testService.runSubset(request);
+            if (result.buildError) {
+                handleBuildError(result.buildError);
+                return undefined;
+            }
+            dispatch({ type: "SET_ALL_RESULTS", payload: result.results });
+            return result;
+        } catch (err) {
+            dispatch({ type: "DONE_RUNNING" });
+            handleError(err);
+            return undefined;
+        }
+    }, [dispatch, handleError, handleBuildError, state.tests]);
 
     return {
         ...state,
@@ -93,7 +135,9 @@ export function useTests() {
         remove,
         run,
         runAll,
+        runSubset,
         selectTest: (name: string | null) => dispatch({ type: "SELECT_TEST", payload: name }),
         clearError: () => dispatch({ type: "CLEAR_ERROR" }),
+        clearBuildError: () => dispatch({ type: "CLEAR_BUILD_ERROR" }),
     };
 }

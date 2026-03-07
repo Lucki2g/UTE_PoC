@@ -34,6 +34,10 @@ public static class TestController
         group.MapPost("/run/all", RunAllTests)
             .WithName("RunAllTests")
             .WithDescription("Run all tests and return aggregated results");
+
+        group.MapPost("/run/subset", RunSubsetTests)
+            .WithName("RunSubsetTests")
+            .WithDescription("Run tests matching a filter (class name or folder path) and return aggregated results");
     }
 
     private static async Task<IResult> GetAllTests(ITestService testService)
@@ -135,6 +139,23 @@ public static class TestController
         {
             var result = await testRunnerService.RunAllTestsAsync();
             return Results.Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Internal error: {ex.Message}");
+        }
+    }
+
+    private static async Task<IResult> RunSubsetTests(RunSubsetRequest request, ITestRunnerService testRunnerService)
+    {
+        try
+        {
+            var result = await testRunnerService.RunSubsetAsync(request.Filter);
+            return Results.Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return Results.BadRequest($"Bad request: {ex.Message}");
         }
         catch (Exception ex)
         {

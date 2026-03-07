@@ -1,17 +1,15 @@
-using System.Runtime.CompilerServices;
-using System.Text.Json;
 using CliWrap;
 using CliWrap.Buffered;
 using Microsoft.Extensions.Options;
 using Microsoft.PowerPlatform.Dataverse.Client;
-using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 
 namespace TestEngine.Services;
 
 public enum SyncPhase { XrmContext, Metadata, Workflows }
 public enum SyncStatus { Started, Complete, Error }
-
 public record SyncProgressEvent(
     SyncPhase Phase,
     SyncStatus Status,
@@ -24,6 +22,8 @@ public class MetadataService : IMetadataService
     private readonly DataverseOptions _dataverse;
     private readonly MetadataToolsOptions _tools;
     private readonly ILogger<MetadataService> _logger;
+
+    private readonly string DefaultEntities = "account,contact,appnotification,annotation,duplicaterule,environmentvariablevalue,environmentvariabledefinition,queue,savedquery,systemuser,task,template";
 
     public MetadataService(
         TestProjectPaths paths,
@@ -41,6 +41,10 @@ public class MetadataService : IMetadataService
 
     public async Task SyncMetadataAsync(string? environmentUrl = null)
     {
+        if (string.IsNullOrWhiteSpace(_tools.Solutions))
+            throw new InvalidOperationException(
+                "No solutions configured. Set 'MetadataTools:Solutions' in appsettings to one or more comma-separated solution unique names.");
+
         var connectionString = _dataverse.BuildConnectionString(environmentUrl);
         await RunXrmContextAsync(connectionString, environmentUrl);
         await RunMetadataGeneratorAsync(connectionString, environmentUrl);
@@ -53,6 +57,14 @@ public class MetadataService : IMetadataService
         string? environmentUrl = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(_tools.Solutions))
+        {
+            yield return new SyncProgressEvent(SyncPhase.XrmContext, SyncStatus.Error,
+                "No solutions configured",
+                "Set 'MetadataTools:Solutions' in appsettings to one or more comma-separated solution unique names.");
+            yield break;
+        }
+
         // Resolve connection string outside any try/catch so we can yield the error
         string connectionString;
         string? configError = null;
@@ -81,14 +93,14 @@ public class MetadataService : IMetadataService
 
         // ── Phase 2: MetadataGenerator ────────────────────────────────────────
         yield return new SyncProgressEvent(SyncPhase.Metadata, SyncStatus.Started,
-            "Generating TypeScript metadata classes…");
+            "Generating C# metadata classes…");
 
         cancellationToken.ThrowIfCancellationRequested();
         SyncProgressEvent phase2Result = await RunPhaseAsync(
             () => RunMetadataGeneratorAsync(connectionString, environmentUrl),
             SyncPhase.Metadata,
-            "TypeScript metadata classes generated",
-            "TypeScript metadata class generation failed");
+            "C# metadata classes generated",
+            "C# metadata class generation failed");
         yield return phase2Result;
         if (phase2Result.Status == SyncStatus.Error) yield break;
 
@@ -137,14 +149,17 @@ public class MetadataService : IMetadataService
             $"/url:{environmentUrl ?? _dataverse.Url}",
             $"/method:ConnectionString",
             $"/connectionString:{connectionString}",
-            $"/out:{outputPath}"
+            $"/out:{outputPath}",
+            $"/servicecontextname:Xrm"
         };
 
         if (!string.IsNullOrWhiteSpace(_tools.Solutions))
             args.Add($"/ss:{_tools.Solutions}");
 
         if (!string.IsNullOrWhiteSpace(_tools.Entities))
-            args.Add($"/es:{_tools.Entities}");
+            args.Add($"/es:{_tools.Entities},{DefaultEntities}");
+        else
+            args.Add($"/es:{DefaultEntities}");
 
         if (!string.IsNullOrWhiteSpace(_tools.XrmContextNamespace))
             args.Add($"/ns:{_tools.XrmContextNamespace}");
@@ -175,7 +190,9 @@ public class MetadataService : IMetadataService
             args.Add($"/ss:{_tools.Solutions}");
 
         if (!string.IsNullOrWhiteSpace(_tools.Entities))
-            args.Add($"/es:{_tools.Entities}");
+            args.Add($"/es:{_tools.Entities},{DefaultEntities}");
+        else
+            args.Add($"/es:{DefaultEntities}");
 
         foreach (var extra in _tools.MetadataGeneratorExtraArguments)
             args.Add(extra);
@@ -191,7 +208,7 @@ public class MetadataService : IMetadataService
             return;
         }
 
-        var outputPath = Path.Combine(ResolvePath(_tools.MetadataGeneratorOutputPath), "Workflow");
+        var outputPath = Path.Combine(ResolvePath(_tools.MetadataGeneratorOutputPath), "..\\Workflows");
         Directory.CreateDirectory(outputPath);
 
         _logger.LogInformation("Connecting to Dataverse to download workflow definitions...");

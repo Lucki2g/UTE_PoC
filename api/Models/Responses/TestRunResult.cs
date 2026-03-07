@@ -7,4 +7,5 @@ public class TestRunResult
     public required string Duration { get; set; }
     public string? Trace { get; set; }
     public string? ErrorMessage { get; set; }
+    public string? BuildError { get; set; }
 }

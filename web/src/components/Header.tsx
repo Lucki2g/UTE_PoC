@@ -27,6 +27,8 @@ import type { SyncPhase } from "../contexts/MetadataContext.tsx";
 import { useProducerContext, useTestContext, useBuilderContext } from "../contexts/index.ts";
 import { useGit } from "../hooks/useGit.ts";
 import { useMetadata } from "../hooks/useMetadata.ts";
+import { useProducers } from "../hooks/useProducers.ts";
+import { useTests } from "../hooks/useTests.ts";
 import { GitBranch, GitLoop, GitPush, GitPullReques, GitClone, GitSettings, GitDeleteRepo } from "../util/icons.tsx";
 import bannerIcon from "../assets/testengine-banner-icon.svg";
 
@@ -201,6 +203,8 @@ function SyncProgress({
 export function Header() {
     const git = useGit();
     const metadata = useMetadata();
+    const producers = useProducers();
+    const tests = useTests();
     const { dispatch: dispatchProducers } = useProducerContext();
     const { dispatch: dispatchTests } = useTestContext();
     const { dispatch: dispatchBuilder } = useBuilderContext();
@@ -258,6 +262,7 @@ export function Header() {
         setCloneSubmitting(true);
         try {
             await git.clone({ repositoryUrl: cloneUrl.trim() });
+            await Promise.all([producers.fetchAll(), tests.fetchAll()]);
             setCloneDialogOpen(false);
             setCloneUrl("");
         } finally {

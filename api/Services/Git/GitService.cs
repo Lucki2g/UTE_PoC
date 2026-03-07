@@ -242,6 +242,28 @@ public class GitService : IGitService
         return prUrl;
     }
 
+    public Task DeleteRepositoryAsync()
+    {
+        if (!Directory.Exists(_repositoryPath))
+        {
+            return Task.CompletedTask;
+        }
+
+        // Force-delete by clearing read-only attributes on all files (git objects are read-only)
+        ForceDeleteDirectory(_repositoryPath);
+        return Task.CompletedTask;
+    }
+
+    private static void ForceDeleteDirectory(string path)
+    {
+        // Clear read-only flags recursively so git's read-only object files can be deleted
+        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+        {
+            File.SetAttributes(file, FileAttributes.Normal);
+        }
+        Directory.Delete(path, recursive: true);
+    }
+
     private async Task<int> GetOutgoingCommitsCountAsync(string branch)
     {
         // Count commits ahead of the remote tracking branch

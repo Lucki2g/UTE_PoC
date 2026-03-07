@@ -93,6 +93,16 @@ export function useGit() {
         }
     }, [dispatch, handleError, fetchStatus]);
 
+    const deleteRepository = useCallback(async () => {
+        dispatch({ type: "LOADING" });
+        try {
+            await gitService.deleteRepository();
+            dispatch({ type: "SET_STATUS", payload: { cloned: false, path: "" } });
+        } catch (err) {
+            handleError(err);
+        }
+    }, [dispatch, handleError]);
+
     return {
         ...state,
         fetchStatus,
@@ -102,6 +112,7 @@ export function useGit() {
         save,
         publish,
         submit,
+        deleteRepository,
         clearError: () => dispatch({ type: "CLEAR_ERROR" }),
     };
 }

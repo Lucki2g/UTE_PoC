@@ -37,6 +37,10 @@ public static class GitController
         group.MapPost("/submit", CreatePullRequest)
             .WithName("CreatePullRequest")
             .WithDescription("Create a pull request from the current branch to a target branch");
+
+        group.MapDelete("/repository", DeleteRepository)
+            .WithName("DeleteRepository")
+            .WithDescription("Permanently delete the local repository clone and reset all git state");
     }
 
     private static async Task<IResult> CloneRepository(CloneRepositoryRequest request, IGitService gitService)
@@ -164,6 +168,19 @@ public static class GitController
         catch (Exception ex) when (ex.Message.Contains("rejected"))
         {
             return Results.Conflict($"Push rejected: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Internal error: {ex.Message}");
+        }
+    }
+
+    private static async Task<IResult> DeleteRepository(IGitService gitService)
+    {
+        try
+        {
+            await gitService.DeleteRepositoryAsync();
+            return Results.Ok(new { message = "Repository deleted successfully" });
         }
         catch (Exception ex)
         {

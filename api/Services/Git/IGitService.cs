@@ -12,4 +12,5 @@ public interface IGitService
     Task SaveChangesAsync(string message);
     Task PublishBranchAsync();
     Task<string> CreatePullRequestAsync(string targetBranch, string title, string description);
+    Task DeleteRepositoryAsync();
 }

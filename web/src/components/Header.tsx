@@ -24,9 +24,10 @@ import {
     makeStyles,
 } from "@fluentui/react-components";
 import type { SyncPhase } from "../contexts/MetadataContext.tsx";
+import { useProducerContext, useTestContext, useBuilderContext } from "../contexts/index.ts";
 import { useGit } from "../hooks/useGit.ts";
 import { useMetadata } from "../hooks/useMetadata.ts";
-import { GitBranch, GitLoop, GitPush, GitPullReques, GitClone, GitSettings } from "../util/icons.tsx";
+import { GitBranch, GitLoop, GitPush, GitPullReques, GitClone, GitSettings, GitDeleteRepo } from "../util/icons.tsx";
 import bannerIcon from "../assets/testengine-banner-icon.svg";
 
 const useStyles = makeStyles({
@@ -200,6 +201,9 @@ function SyncProgress({
 export function Header() {
     const git = useGit();
     const metadata = useMetadata();
+    const { dispatch: dispatchProducers } = useProducerContext();
+    const { dispatch: dispatchTests } = useTestContext();
+    const { dispatch: dispatchBuilder } = useBuilderContext();
     const styles = useStyles();
 
     const [syncDialogOpen, setSyncDialogOpen] = useState(false);
@@ -207,6 +211,9 @@ export function Header() {
     const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
     const [cloneUrl, setCloneUrl] = useState("");
     const [cloneSubmitting, setCloneSubmitting] = useState(false);
+
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
     const [prDialogOpen, setPrDialogOpen] = useState(false);
     const [prTitle, setPrTitle] = useState("");
@@ -255,6 +262,19 @@ export function Header() {
             setCloneUrl("");
         } finally {
             setCloneSubmitting(false);
+        }
+    };
+
+    const handleDeleteRepository = async () => {
+        setDeleteSubmitting(true);
+        try {
+            await git.deleteRepository();
+            dispatchProducers({ type: "SET_PRODUCERS", payload: [] });
+            dispatchTests({ type: "SET_TESTS", payload: [] });
+            dispatchBuilder({ type: "CLEAR" });
+            setDeleteDialogOpen(false);
+        } finally {
+            setDeleteSubmitting(false);
         }
     };
 
@@ -311,6 +331,15 @@ export function Header() {
                             >
                                 Clone repository
                             </MenuItem>
+                            {status?.cloned && (
+                                <MenuItem
+                                    icon={<span style={{ display: "flex", width: "16px", height: "16px", color: tokens.colorPaletteRedForeground1 }}>{GitDeleteRepo}</span>}
+                                    style={{ color: tokens.colorPaletteRedForeground1 }}
+                                    onClick={() => setDeleteDialogOpen(true)}
+                                >
+                                    Delete repository
+                                </MenuItem>
+                            )}
                         </MenuList>
                     </MenuPopover>
                 </Menu>
@@ -418,6 +447,36 @@ export function Header() {
                                     Retry
                                 </Button>
                             )}
+                        </DialogActions>
+                    </DialogBody>
+                </DialogSurface>
+            </Dialog>
+
+            {/* Delete repository confirm dialog */}
+            <Dialog open={deleteDialogOpen} onOpenChange={(_e, data) => { if (!data.open && !deleteSubmitting) setDeleteDialogOpen(false); }}>
+                <DialogSurface>
+                    <DialogBody>
+                        <DialogTitle>Delete Repository</DialogTitle>
+                        <DialogContent style={{ display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM }}>
+                            <Text style={{ color: tokens.colorPaletteRedForeground1, fontWeight: tokens.fontWeightSemibold }}>
+                                This will permanently delete the local repository clone and reset all git state.
+                            </Text>
+                            <Text size={200} style={{ color: tokens.colorNeutralForeground2 }}>
+                                Any uncommitted changes will be lost. This cannot be undone.
+                            </Text>
+                        </DialogContent>
+                        <DialogActions>
+                            <Button appearance="secondary" onClick={() => setDeleteDialogOpen(false)} disabled={deleteSubmitting}>
+                                Cancel
+                            </Button>
+                            <Button
+                                appearance="primary"
+                                style={{ backgroundColor: tokens.colorPaletteRedBackground3, borderColor: tokens.colorPaletteRedBackground3 }}
+                                onClick={handleDeleteRepository}
+                                disabled={deleteSubmitting}
+                            >
+                                {deleteSubmitting ? "Deleting…" : "Delete Repository"}
+                            </Button>
                         </DialogActions>
                     </DialogBody>
                 </DialogSurface>

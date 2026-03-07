@@ -36,4 +36,8 @@ export const gitService = {
     submit(request: SubmitRequest): Promise<string> {
         return api.post("/git/submit", request);
     },
+
+    deleteRepository(): Promise<void> {
+        return api.del("/git/repository");
+    },
 };

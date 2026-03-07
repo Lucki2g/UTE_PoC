@@ -290,18 +290,25 @@ function ProducersTab() {
                                     />
                                 </Field>
                                 <Field label="Branch">
-                                    <RadioGroup
-                                        value={branchOption}
-                                        onChange={(_ev, data) => setBranchOption(data.value as "stay" | "new")}
-                                    >
-                                        <Radio
-                                            value="stay"
-                                            label={`Stay on current branch (${git.status?.branch ?? "unknown"})`}
-                                        />
-                                        <Radio value="new" label="Create a new branch" />
-                                    </RadioGroup>
+                                    {git.status?.branch === "main" ? (
+                                        // Must create a new branch when on main
+                                        <Text size={200} style={{ color: tokens.colorPaletteRedForeground1 }}>
+                                            You are on <strong>main</strong>. A new branch is required.
+                                        </Text>
+                                    ) : (
+                                        <RadioGroup
+                                            value={branchOption}
+                                            onChange={(_ev, data) => setBranchOption(data.value as "stay" | "new")}
+                                        >
+                                            <Radio
+                                                value="stay"
+                                                label={`Stay on current branch (${git.status?.branch ?? "unknown"})`}
+                                            />
+                                            <Radio value="new" label="Create a new branch" />
+                                        </RadioGroup>
+                                    )}
                                 </Field>
-                                {branchOption === "new" && (
+                                {(branchOption === "new" || git.status?.branch === "main") && (
                                     <Field
                                         label="Branch name"
                                         hint={`Branch will be created as ${userFolder}/…`}
@@ -321,7 +328,7 @@ function ProducersTab() {
                                 <Button
                                     appearance="primary"
                                     onClick={handleCreateFolder}
-                                    disabled={!newEntityName.trim() || (branchOption === "new" && !newBranchName.trim())}
+                                    disabled={!newEntityName.trim() || (branchOption === "new" || git.status?.branch === "main") && !newBranchName.trim()}
                                 >
                                     Create
                                 </Button>

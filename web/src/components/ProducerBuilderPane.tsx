@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
     Text,
     Button,
+    Tooltip,
     Input,
     Field,
     Spinner,
@@ -217,6 +218,8 @@ export function ProducerBuilderPane() {
 
     if (!editorState) return null;
 
+    // Block saves on main to prevent direct commits to the main branch
+    const isOnMainBranch = git.status?.branch === "main";
 
     return (
         <div className={styles.pane}>
@@ -232,24 +235,36 @@ export function ProducerBuilderPane() {
                     </Badge>
                 )}
                 <div style={{ marginLeft: "auto", display: "flex", gap: tokens.spacingHorizontalS }}>
+                    <Tooltip
+                        content="Cannot save directly to main — switch to a feature branch first"
+                        relationship="label"
+                        visible={isOnMainBranch ? undefined : false}
+                    >
                     <Button
                         appearance="subtle"
                         size="small"
                         icon={<SaveRegular />}
                         onClick={handleSave}
-                        disabled={!dirty || loading}
+                        disabled={!dirty || loading || isOnMainBranch}
                     >
                         Save
                     </Button>
+                    </Tooltip>
+                    <Tooltip
+                        content="Cannot save directly to main — switch to a feature branch first"
+                        relationship="label"
+                        visible={isOnMainBranch ? undefined : false}
+                    >
                     <Button
                         appearance="primary"
                         size="small"
                         icon={<span className={styles.iconWrapper}>{GitPush}</span>}
                         onClick={handleSaveAndPublish}
-                        disabled={!dirty || loading}
+                        disabled={!dirty || loading || isOnMainBranch}
                     >
                         Save & Publish
                     </Button>
+                    </Tooltip>
                     <Button
                         appearance="secondary"
                         size="small"

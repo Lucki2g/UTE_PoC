@@ -15,13 +15,18 @@ import {
     Input,
     Textarea,
     ProgressBar,
+    Menu,
+    MenuTrigger,
+    MenuPopover,
+    MenuList,
+    MenuItem,
     tokens,
     makeStyles,
 } from "@fluentui/react-components";
 import type { SyncPhase } from "../contexts/MetadataContext.tsx";
 import { useGit } from "../hooks/useGit.ts";
 import { useMetadata } from "../hooks/useMetadata.ts";
-import { GitBranch, GitLoop, GitPush, GitPullReques } from "../util/icons.tsx";
+import { GitBranch, GitLoop, GitPush, GitPullReques, GitClone, GitSettings } from "../util/icons.tsx";
 import bannerIcon from "../assets/testengine-banner-icon.svg";
 
 const useStyles = makeStyles({
@@ -199,6 +204,10 @@ export function Header() {
 
     const [syncDialogOpen, setSyncDialogOpen] = useState(false);
 
+    const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
+    const [cloneUrl, setCloneUrl] = useState("");
+    const [cloneSubmitting, setCloneSubmitting] = useState(false);
+
     const [prDialogOpen, setPrDialogOpen] = useState(false);
     const [prTitle, setPrTitle] = useState("");
     const [prDescription, setPrDescription] = useState("");
@@ -237,6 +246,18 @@ export function Header() {
         }
     };
 
+    const handleClone = async () => {
+        if (!cloneUrl.trim()) return;
+        setCloneSubmitting(true);
+        try {
+            await git.clone({ repositoryUrl: cloneUrl.trim() });
+            setCloneDialogOpen(false);
+            setCloneUrl("");
+        } finally {
+            setCloneSubmitting(false);
+        }
+    };
+
     const handleClosePrDialog = () => {
         setPrDialogOpen(false);
         setPrTitle("");
@@ -272,6 +293,27 @@ export function Header() {
                 {!status?.cloned && !git.loading && (
                     <Text size={200}>Not cloned</Text>
                 )}
+
+                {/* Settings menu */}
+                <Menu>
+                    <MenuTrigger disableButtonEnhancement>
+                        <Tooltip content="Settings" relationship="label">
+                            <button className={styles.iconBtn} aria-label="Settings">
+                                <span className={styles.svgIcon}>{GitSettings}</span>
+                            </button>
+                        </Tooltip>
+                    </MenuTrigger>
+                    <MenuPopover>
+                        <MenuList>
+                            <MenuItem
+                                icon={<span style={{ display: "flex", width: "16px", height: "16px" }}>{GitClone}</span>}
+                                onClick={() => setCloneDialogOpen(true)}
+                            >
+                                Clone repository
+                            </MenuItem>
+                        </MenuList>
+                    </MenuPopover>
+                </Menu>
 
                 {status?.cloned && (
                     <>
@@ -320,6 +362,34 @@ export function Header() {
                     </>
                 )}
             </div>
+
+            {/* Clone repository dialog */}
+            <Dialog open={cloneDialogOpen} onOpenChange={(_e, data) => { if (!data.open && !cloneSubmitting) { setCloneDialogOpen(false); setCloneUrl(""); } }}>
+                <DialogSurface>
+                    <DialogBody>
+                        <DialogTitle>Clone Repository</DialogTitle>
+                        <DialogContent style={{ display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM }}>
+                            <Field label="Repository URL" required>
+                                <Input
+                                    value={cloneUrl}
+                                    onChange={(_ev, data) => setCloneUrl(data.value)}
+                                    onKeyDown={(e) => { if (e.key === "Enter") handleClone(); }}
+                                    placeholder="https://github.com/org/repo.git"
+                                    disabled={cloneSubmitting}
+                                />
+                            </Field>
+                        </DialogContent>
+                        <DialogActions>
+                            <Button appearance="secondary" onClick={() => { setCloneDialogOpen(false); setCloneUrl(""); }} disabled={cloneSubmitting}>
+                                Cancel
+                            </Button>
+                            <Button appearance="primary" onClick={handleClone} disabled={!cloneUrl.trim() || cloneSubmitting}>
+                                {cloneSubmitting ? "Cloning…" : "Clone"}
+                            </Button>
+                        </DialogActions>
+                    </DialogBody>
+                </DialogSurface>
+            </Dialog>
 
             {/* Sync Metadata dialog */}
             <Dialog open={syncDialogOpen} onOpenChange={(_e, data) => { if (!data.open && !metadata.syncing) setSyncDialogOpen(false); }}>

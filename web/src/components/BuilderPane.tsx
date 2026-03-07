@@ -5,6 +5,7 @@ import {
     Button,
     Toolbar,
     ToolbarButton,
+    Tooltip,
     Dialog,
     DialogTrigger,
     DialogSurface,
@@ -594,6 +595,8 @@ function BuilderPaneInner() {
 
     const isEmpty = state.nodes.length === 0;
     const hasTestOpen = !!state.testName;
+    // Block saves on main to prevent direct commits to the main branch
+    const isOnMainBranch = git.status?.branch === "main";
 
     // ─── Render ──────────────────────────────────────────────────────────────
 
@@ -641,18 +644,25 @@ function BuilderPaneInner() {
                                             />
                                         </Field>
                                         <Field label="Branch">
-                                            <RadioGroup
-                                                value={branchOption}
-                                                onChange={(_ev, data) => setBranchOption(data.value as "stay" | "new")}
-                                            >
-                                                <Radio
-                                                    value="stay"
-                                                    label={`Stay on current branch (${git.status?.branch ?? "unknown"})`}
-                                                />
-                                                <Radio value="new" label="Create a new branch" />
-                                            </RadioGroup>
+                                            {isOnMainBranch ? (
+                                                // Must create a new branch when on main
+                                                <Text size={200} style={{ color: tokens.colorPaletteRedForeground1 }}>
+                                                    You are on <strong>main</strong>. A new branch is required.
+                                                </Text>
+                                            ) : (
+                                                <RadioGroup
+                                                    value={branchOption}
+                                                    onChange={(_ev, data) => setBranchOption(data.value as "stay" | "new")}
+                                                >
+                                                    <Radio
+                                                        value="stay"
+                                                        label={`Stay on current branch (${git.status?.branch ?? "unknown"})`}
+                                                    />
+                                                    <Radio value="new" label="Create a new branch" />
+                                                </RadioGroup>
+                                            )}
                                         </Field>
-                                        {branchOption === "new" && (
+                                        {(branchOption === "new" || isOnMainBranch) && (
                                             <Field
                                                 label="Branch name"
                                                 hint={`Branch will be created as ${userFolder}/…`}
@@ -672,7 +682,7 @@ function BuilderPaneInner() {
                                         <Button
                                             appearance="primary"
                                             onClick={handleCreateNew}
-                                            disabled={!newTestName.trim() || (branchOption === "new" && !newBranchName.trim())}
+                                            disabled={!newTestName.trim() || (branchOption === "new" || isOnMainBranch) && !newBranchName.trim()}
                                         >
                                             Create
                                         </Button>
@@ -683,24 +693,36 @@ function BuilderPaneInner() {
                     )}
                     {hasTestOpen && (
                         <div style={{ display: "flex", gap: tokens.spacingHorizontalS }}>
+                            <Tooltip
+                                content="Cannot save directly to main — switch to a feature branch first"
+                                relationship="label"
+                                visible={isOnMainBranch ? undefined : false}
+                            >
                             <Button
                                 appearance="subtle"
                                 size="small"
                                 icon={<SaveRegular />}
                                 onClick={handleSave}
-                                disabled={!state.dirty}
+                                disabled={!state.dirty || isOnMainBranch}
                             >
                                 Save
                             </Button>
+                            </Tooltip>
+                            <Tooltip
+                                content="Cannot save directly to main — switch to a feature branch first"
+                                relationship="label"
+                                visible={isOnMainBranch ? undefined : false}
+                            >
                             <Button
                                 appearance="primary"
                                 size="small"
                                 icon={<BeakerEditRegular />}
                                 onClick={handleSaveAndPublish}
-                                disabled={!state.dirty}
+                                disabled={!state.dirty || isOnMainBranch}
                             >
                                 Save & Publish
                             </Button>
+                            </Tooltip>
                             <Button
                                 appearance="secondary"
                                 size="small"

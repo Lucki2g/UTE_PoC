@@ -22,8 +22,10 @@ import {
     AddRegular,
     BeakerSettingsRegular,
 } from "@fluentui/react-icons";
+import { GitPush } from "../util/icons.tsx";
 import { useAppMode } from "../contexts/AppModeContext.tsx";
 import { useProducers } from "../hooks/useProducers.ts";
+import { useGit } from "../hooks/useGit.ts";
 import { producerService } from "../services/producerService.ts";
 import { UnsavedChangesDialog } from "./UnsavedChangesDialog.tsx";
 import { ProducerDraftNode } from "./nodes/producerDraft/ProducerDraftNode.tsx";
@@ -71,12 +73,18 @@ const useStyles = makeStyles({
         marginLeft: tokens.spacingHorizontalXS,
         backgroundColor: tokens.colorPaletteDarkOrangeBackground3,
     },
+    iconWrapper: {
+        display: "flex",
+        alignItems: "center",
+        color: "currentColor",
+    },
 });
 
 export function ProducerBuilderPane() {
     const styles = useStyles();
     const { state, dispatch } = useAppMode();
     const producers = useProducers();
+    const git = useGit();
 
     const [dsl, setDsl] = useState<DslProducerDefinition | null>(null);
     const [dirty, setDirty] = useState(false);
@@ -95,7 +103,6 @@ export function ProducerBuilderPane() {
         if (editorState.isNew) {
             setDsl({ dslVersion: "1.0", producer: "DataProducer", drafts: [] });
             setDirty(false);
-            // focusNewDraft on a brand-new producer: open Add Draft immediately
             if (editorState.focusNewDraft) {
                 setAddDraftOpen(true);
                 dispatch({ type: "CLEAR_FOCUS_NEW_DRAFT" });
@@ -138,7 +145,6 @@ export function ProducerBuilderPane() {
         setDirty(true);
     }, []);
 
-    // Pre-fill entity name from the first existing draft when opening Add Draft dialog
     const openAddDraftDialog = useCallback(() => {
         setNewDraftId("");
         setNewEntityName(dsl?.drafts[0]?.entity.logicalName ?? "");
@@ -163,7 +169,7 @@ export function ProducerBuilderPane() {
         setNewEntityName("");
     }, [newDraftId, newEntityName]);
 
-    const handleSave = useCallback(async () => {
+    const persistProducer = useCallback(async () => {
         if (!editorState || !dsl) return;
         if (editorState.isNew) {
             await producers.create({ code: dsl });
@@ -172,6 +178,29 @@ export function ProducerBuilderPane() {
         }
         setDirty(false);
     }, [editorState, dsl, producers]);
+
+    const handleSave = useCallback(async () => {
+        await persistProducer();
+        // Auto-commit after saving the file
+        try {
+            const label = editorState?.entityName ?? "producer";
+            await git.save({ message: `chore: save producer ${label}` });
+        } catch {
+            // Commit failure is non-fatal — file is already saved on disk
+        }
+    }, [persistProducer, git, editorState?.entityName]);
+
+    const handleSaveAndPublish = useCallback(async () => {
+        await persistProducer();
+        // Commit then push to remote
+        try {
+            const label = editorState?.entityName ?? "producer";
+            await git.save({ message: `chore: publish producer ${label}` });
+            await git.publish();
+        } catch {
+            // Non-fatal
+        }
+    }, [persistProducer, git, editorState?.entityName]);
 
     const handleClose = useCallback(() => {
         if (dirty) {
@@ -211,6 +240,15 @@ export function ProducerBuilderPane() {
                         disabled={!dirty || loading}
                     >
                         Save
+                    </Button>
+                    <Button
+                        appearance="primary"
+                        size="small"
+                        icon={<span className={styles.iconWrapper}>{GitPush}</span>}
+                        onClick={handleSaveAndPublish}
+                        disabled={!dirty || loading}
+                    >
+                        Save & Publish
                     </Button>
                     <Button
                         appearance="secondary"

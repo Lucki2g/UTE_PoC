@@ -12,6 +12,8 @@ export interface LoadBranchRequest {
 
 export interface CreateBranchRequest {
     branchName: string;
+    /** Optional user folder prefix, e.g. "john.doe". Branch will be created as "{userFolder}/{branchName}". */
+    userFolder?: string;
 }
 
 export interface SaveChangesRequest {

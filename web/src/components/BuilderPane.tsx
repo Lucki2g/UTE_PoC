@@ -15,7 +15,8 @@ import {
     Input,
     Badge,
     Field,
-    Checkbox,
+    Radio,
+    RadioGroup,
     makeStyles,
     tokens,
 } from "@fluentui/react-components";
@@ -48,6 +49,7 @@ import { useBuilderContext } from "../contexts/BuilderContext.tsx";
 import { useTests } from "../hooks/useTests.ts";
 import { useGit } from "../hooks/useGit.ts";
 import { generateDsl } from "../util/dslGenerator.ts";
+import { getDataverseUserFolder } from "../util/dataverseUser.ts";
 import { ProducerNode } from "./nodes/producer/ProducerNode.tsx";
 import { ServiceNode } from "./nodes/dao/ServiceNode.tsx";
 import { AssertNode } from "./nodes/assert/AssertNode.tsx";
@@ -176,10 +178,16 @@ function BuilderPaneInner() {
     const [newTestName, setNewTestName] = useState("");
     const [newClassName, setNewClassName] = useState("");
     const [newFolderName, setNewFolderName] = useState("");
-    const [createBranch, setCreateBranch] = useState(false);
+    // "stay" | "new"
+    const [branchOption, setBranchOption] = useState<"stay" | "new">("stay");
     const [newBranchName, setNewBranchName] = useState("");
     const [closeWarningOpen, setCloseWarningOpen] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const [userFolder, setUserFolder] = useState("users");
+
+    useEffect(() => {
+        getDataverseUserFolder().then(setUserFolder);
+    }, []);
 
     // Track the last layout signature to avoid redundant repositioning
     const lastLayoutSigRef = useRef("");
@@ -350,7 +358,6 @@ function BuilderPaneInner() {
             // Re-wire edges: remove old edge at insertion point, add two new ones
             const prev = index > 0 ? sorted[index - 1] : null;
             const next = sorted[index];
-
             let newEdges = [...state.edges];
 
             // Remove edge between prev and next if it exists
@@ -362,20 +369,12 @@ function BuilderPaneInner() {
 
             // Connect prev → new node
             if (prev) {
-                newEdges.push({
-                    id: `e_${prev.id}_${tagged.id}`,
-                    source: prev.id,
-                    target: tagged.id,
-                });
+                newEdges.push({ id: `e_${prev.id}_${tagged.id}`, source: prev.id, target: tagged.id });
             }
 
             // Connect new node → next
             if (next) {
-                newEdges.push({
-                    id: `e_${tagged.id}_${next.id}`,
-                    source: tagged.id,
-                    target: next.id,
-                });
+                newEdges.push({ id: `e_${tagged.id}_${next.id}`, source: tagged.id, target: next.id });
             }
 
             dispatch({ type: "SET_NODES_AND_EDGES", payload: { nodes: allNodes, edges: newEdges } });
@@ -467,10 +466,7 @@ function BuilderPaneInner() {
         zones.push({
             id: "dz_0",
             type: "dropZone",
-            position: {
-                x: NODE_X,
-                y: sorted[0].position.y - NODE_GAP / 2 - DROP_ZONE_HEIGHT,
-            },
+            position: { x: NODE_X, y: sorted[0].position.y - NODE_GAP / 2 - DROP_ZONE_HEIGHT },
             data: { nodeType: "dropZone", insertionIndex: 0 } satisfies DropZoneNodeData,
             selectable: false,
             draggable: false,
@@ -496,10 +492,7 @@ function BuilderPaneInner() {
         zones.push({
             id: `dz_${sorted.length}`,
             type: "dropZone",
-            position: {
-                x: NODE_X,
-                y: sorted[lastIdx].position.y + heights[lastIdx] + NODE_GAP / 2,
-            },
+            position: { x: NODE_X, y: sorted[lastIdx].position.y + heights[lastIdx] + NODE_GAP / 2 },
             data: { nodeType: "dropZone", insertionIndex: sorted.length } satisfies DropZoneNodeData,
             selectable: false,
             draggable: false,
@@ -533,11 +526,26 @@ function BuilderPaneInner() {
 
     const handleSave = useCallback(async () => {
         await persistTest();
-    }, [persistTest]);
+        // Auto-commit after saving the file
+        try {
+            const label = state.testClassName ?? state.testName ?? "test";
+            await git.save({ message: `chore: save test ${label}` });
+        } catch {
+            // Commit failure is non-fatal — file is already saved on disk
+        }
+    }, [persistTest, git, state.testClassName, state.testName]);
 
     const handleSaveAndPublish = useCallback(async () => {
         await persistTest();
-    }, [persistTest]);
+        // Commit then push to remote
+        try {
+            const label = state.testClassName ?? state.testName ?? "test";
+            await git.save({ message: `chore: publish test ${label}` });
+            await git.publish();
+        } catch {
+            // Non-fatal
+        }
+    }, [persistTest, git, state.testClassName, state.testName]);
 
     const handleClose = useCallback(() => {
         if (state.dirty) {
@@ -556,8 +564,11 @@ function BuilderPaneInner() {
         const name = newTestName.trim();
         if (!name) return;
 
-        if (createBranch && newBranchName.trim()) {
-            await git.createBranch({ branchName: newBranchName.trim() });
+        if (branchOption === "new" && newBranchName.trim()) {
+            await git.createBranch({
+                branchName: newBranchName.trim(),
+                userFolder,
+            });
         }
 
         dispatch({ type: "CLEAR" });
@@ -577,9 +588,9 @@ function BuilderPaneInner() {
         setNewTestName("");
         setNewClassName("");
         setNewFolderName("");
-        setCreateBranch(false);
+        setBranchOption("stay");
         setNewBranchName("");
-    }, [dispatch, newTestName, newClassName, newFolderName, createBranch, newBranchName, git]);
+    }, [dispatch, newTestName, newClassName, newFolderName, branchOption, newBranchName, git]);
 
     const isEmpty = state.nodes.length === 0;
     const hasTestOpen = !!state.testName;
@@ -629,13 +640,23 @@ function BuilderPaneInner() {
                                                 onChange={(_ev, data) => setNewFolderName(data.value)}
                                             />
                                         </Field>
-                                        <Checkbox
-                                            label="Create a new branch"
-                                            checked={createBranch}
-                                            onChange={(_ev, data) => setCreateBranch(!!data.checked)}
-                                        />
-                                        {createBranch && (
-                                            <Field label="Branch name">
+                                        <Field label="Branch">
+                                            <RadioGroup
+                                                value={branchOption}
+                                                onChange={(_ev, data) => setBranchOption(data.value as "stay" | "new")}
+                                            >
+                                                <Radio
+                                                    value="stay"
+                                                    label={`Stay on current branch (${git.status?.branch ?? "unknown"})`}
+                                                />
+                                                <Radio value="new" label="Create a new branch" />
+                                            </RadioGroup>
+                                        </Field>
+                                        {branchOption === "new" && (
+                                            <Field
+                                                label="Branch name"
+                                                hint={`Branch will be created as ${userFolder}/…`}
+                                            >
                                                 <Input
                                                     placeholder="e.g. feature/account-tests"
                                                     value={newBranchName}
@@ -651,7 +672,7 @@ function BuilderPaneInner() {
                                         <Button
                                             appearance="primary"
                                             onClick={handleCreateNew}
-                                            disabled={!newTestName.trim() || (createBranch && !newBranchName.trim())}
+                                            disabled={!newTestName.trim() || (branchOption === "new" && !newBranchName.trim())}
                                         >
                                             Create
                                         </Button>

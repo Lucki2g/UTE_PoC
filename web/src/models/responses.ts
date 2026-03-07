@@ -13,6 +13,7 @@ export interface RepositoryStatus {
     branch?: string;
     clean?: boolean;
     changedFiles?: number;
+    outgoingCommits?: number;
     path: string;
 }
 

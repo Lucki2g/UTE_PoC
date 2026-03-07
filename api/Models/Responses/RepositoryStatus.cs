@@ -6,5 +6,6 @@ public class RepositoryStatus
     public string? Branch { get; set; }
     public bool? Clean { get; set; }
     public int? ChangedFiles { get; set; }
+    public int? OutgoingCommits { get; set; }
     public required string Path { get; set; }
 }

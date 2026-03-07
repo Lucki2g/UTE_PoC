@@ -16,7 +16,7 @@ public static class GitController
 
         group.MapGet("/status", GetStatus)
             .WithName("GetStatus")
-            .WithDescription("Return the current repository status (branch, clean/dirty, clone state)");
+            .WithDescription("Return the current repository status (branch, clean/dirty, clone state, outgoing commits)");
 
         group.MapPost("/load", LoadBranch)
             .WithName("LoadBranch")
@@ -24,7 +24,7 @@ public static class GitController
 
         group.MapPost("/new", CreateNewBranch)
             .WithName("CreateNewBranch")
-            .WithDescription("Fetch + pull from main, then create a new branch from main");
+            .WithDescription("Fetch + pull from main, then create a new branch from main. Optionally prefix with a user folder.");
 
         group.MapPost("/save", SaveChanges)
             .WithName("SaveChanges")
@@ -98,8 +98,13 @@ public static class GitController
     {
         try
         {
-            await gitService.CreateNewBranchAsync(request.BranchName);
-            return Results.Ok(new { message = $"Created and switched to branch '{request.BranchName}'" });
+            // Build full branch name: optionally prefix with user folder
+            var fullName = !string.IsNullOrWhiteSpace(request.UserFolder)
+                ? $"{request.UserFolder.Trim('/')}/{request.BranchName}"
+                : request.BranchName;
+
+            await gitService.CreateNewBranchAsync(fullName);
+            return Results.Ok(new { message = $"Created and switched to branch '{fullName}'", branch = fullName });
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("not initialized"))
         {
@@ -177,17 +182,17 @@ public static class GitController
         {
             return Results.BadRequest(ex.Message);
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("no remote"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("requires GitHub configuration"))
         {
             return Results.BadRequest($"Bad request: {ex.Message}");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("GitHub API error"))
+        {
+            return Results.Problem($"GitHub API error: {ex.Message}");
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("already exists"))
         {
             return Results.Conflict($"Conflict: {ex.Message}");
-        }
-        catch (NotImplementedException ex)
-        {
-            return Results.Problem($"Not implemented: {ex.Message}", statusCode: 501);
         }
         catch (Exception ex)
         {

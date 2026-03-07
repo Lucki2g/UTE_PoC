@@ -4,6 +4,8 @@ import {
     Button,
     Input,
     Field,
+    Radio,
+    RadioGroup,
     Dialog,
     DialogTrigger,
     DialogSurface,
@@ -32,6 +34,8 @@ import {
 } from "@fluentui/react-icons";
 import { useProducers } from "../hooks/useProducers.ts";
 import { useAppMode } from "../contexts/AppModeContext.tsx";
+import { useGit } from "../hooks/useGit.ts";
+import { getDataverseUserFolder } from "../util/dataverseUser.ts";
 import dataproducerIcon from "../assets/dataproducer-icon.svg";
 import dataverseserviceIcon from "../assets/dataverseservice-icon.svg";
 import assertIcon from "../assets/assert-icon.svg";
@@ -124,13 +128,21 @@ function ProducersTab() {
     const styles = useStyles();
     const { producers, loading, fetchAll } = useProducers();
     const { dispatch: modeDispatch } = useAppMode();
+    const git = useGit();
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
     const [newFolderOpen, setNewFolderOpen] = useState(false);
     const [newEntityName, setNewEntityName] = useState("");
+    const [branchOption, setBranchOption] = useState<"stay" | "new">("stay");
+    const [newBranchName, setNewBranchName] = useState("");
+    const [userFolder, setUserFolder] = useState("users");
 
     useEffect(() => {
         fetchAll();
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        getDataverseUserFolder().then(setUserFolder);
+    }, []);
 
     // Auto-expand all entities once loaded
     useEffect(() => {
@@ -157,14 +169,24 @@ function ProducersTab() {
     };
 
     // Create a new producer file (folder/class) and open its editor
-    const handleCreateFolder = () => {
+    const handleCreateFolder = async () => {
         if (!newEntityName.trim()) return;
+
+        if (branchOption === "new" && newBranchName.trim()) {
+            await git.createBranch({
+                branchName: newBranchName.trim(),
+                userFolder,
+            });
+        }
+
         modeDispatch({
             type: "OPEN_PRODUCER_EDITOR",
             payload: { entityName: newEntityName.trim(), dsl: null, isNew: true },
         });
         setNewFolderOpen(false);
         setNewEntityName("");
+        setBranchOption("stay");
+        setNewBranchName("");
     };
 
     if (loading) return <Spinner size="small" label="Loading producers..." />;
@@ -267,6 +289,30 @@ function ProducersTab() {
                                         onKeyDown={(e) => { if (e.key === "Enter") handleCreateFolder(); }}
                                     />
                                 </Field>
+                                <Field label="Branch">
+                                    <RadioGroup
+                                        value={branchOption}
+                                        onChange={(_ev, data) => setBranchOption(data.value as "stay" | "new")}
+                                    >
+                                        <Radio
+                                            value="stay"
+                                            label={`Stay on current branch (${git.status?.branch ?? "unknown"})`}
+                                        />
+                                        <Radio value="new" label="Create a new branch" />
+                                    </RadioGroup>
+                                </Field>
+                                {branchOption === "new" && (
+                                    <Field
+                                        label="Branch name"
+                                        hint={`Branch will be created as ${userFolder}/…`}
+                                    >
+                                        <Input
+                                            placeholder="e.g. feature/my-producer"
+                                            value={newBranchName}
+                                            onChange={(_ev, data) => setNewBranchName(data.value)}
+                                        />
+                                    </Field>
+                                )}
                             </DialogContent>
                             <DialogActions>
                                 <DialogTrigger disableButtonEnhancement>
@@ -275,7 +321,7 @@ function ProducersTab() {
                                 <Button
                                     appearance="primary"
                                     onClick={handleCreateFolder}
-                                    disabled={!newEntityName.trim()}
+                                    disabled={!newEntityName.trim() || (branchOption === "new" && !newBranchName.trim())}
                                 >
                                     Create
                                 </Button>
@@ -316,28 +362,29 @@ function MiscTab() {
                 <img className={styles.itemIcon} src={dataverseserviceIcon} alt="" />
                 <Text size={200}>DataverseService</Text>
             </div>
-            {assertBlocks.map((b) => (
+
+            {assertBlocks.map((a) => (
                 <div
-                    key={b.id}
+                    key={a.id}
                     className={styles.item}
                     draggable
-                    onDragStart={(e) => onDragStart(e, "assert", b.id)}
+                    onDragStart={(e) => onDragStart(e, "assert", a.id)}
                 >
                     <img className={styles.itemIcon} src={assertIcon} alt="" />
-                    <Text size={200}>{b.label}</Text>
+                    <Text size={200}>{a.label}</Text>
                 </div>
             ))}
         </div>
     );
 }
 
-// ─── Main Component ──────────────────────────────────────────────────────────
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export function ComponentExplorer() {
     const styles = useStyles();
     const [activeTab, setActiveTab] = useState<TabValue>("producers");
 
-    const onTabSelect = (_event: SelectTabEvent, data: SelectTabData) => {
+    const handleTabSelect = (_event: SelectTabEvent, data: SelectTabData) => {
         setActiveTab(data.value as TabValue);
     };
 
@@ -346,24 +393,19 @@ export function ComponentExplorer() {
             <div className={styles.header}>
                 <Text weight="semibold" size={200}>Components</Text>
             </div>
-
             <TabList
-                selectedValue={activeTab}
-                onTabSelect={onTabSelect}
                 size="small"
+                selectedValue={activeTab}
+                onTabSelect={handleTabSelect}
+                style={{ paddingLeft: tokens.spacingHorizontalS }}
             >
                 <Tab value="producers" icon={<BoxRegular />}>Producers</Tab>
                 <Tab value="misc" icon={<MoreHorizontalRegular />}>Misc</Tab>
             </TabList>
-
-            {activeTab === "producers"
-                ? <ProducersTab />
-                : (
-                    <div className={styles.content}>
-                        {activeTab === "misc" && <MiscTab />}
-                    </div>
-                )
-            }
+            <div className={styles.content} style={{ display: activeTab === "producers" ? "flex" : undefined, flexDirection: activeTab === "producers" ? "column" : undefined, padding: activeTab === "producers" ? 0 : undefined, overflow: "hidden" }}>
+                {activeTab === "producers" && <ProducersTab />}
+                {activeTab === "misc" && <MiscTab />}
+            </div>
         </div>
     );
 }

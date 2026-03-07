@@ -1,3 +1,6 @@
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using CliWrap;
 using CliWrap.Buffered;
 using TestEngine.Models.Responses;
@@ -87,12 +90,23 @@ public class GitService : IGitService
         var changedLines = statusOutput
             .Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
+        int? outgoingCommits = null;
+        try
+        {
+            outgoingCommits = await GetOutgoingCommitsCountAsync(branch);
+        }
+        catch
+        {
+            // If we can't determine outgoing commits (e.g. no upstream set), leave null
+        }
+
         return new RepositoryStatus
         {
             Cloned = true,
             Branch = branch,
             Clean = changedLines.Length == 0,
             ChangedFiles = changedLines.Length,
+            OutgoingCommits = outgoingCommits,
             Path = _repositoryPath
         };
     }
@@ -186,13 +200,59 @@ public class GitService : IGitService
             string.IsNullOrWhiteSpace(_githubOwner) ||
             string.IsNullOrWhiteSpace(_githubRepository))
         {
-            throw new NotImplementedException("Pull request creation requires GitHub configuration. TODO: Implement GitHub/Azure DevOps REST API call.");
+            throw new InvalidOperationException("Pull request creation requires GitHub configuration (GitHub:Token, GitHub:Owner, GitHub:Repository).");
         }
 
         var currentBranch = await GetCurrentBranchAsync();
 
-        // TODO: Implement actual GitHub/Azure DevOps REST API call
-        throw new NotImplementedException("Pull request creation via GitHub/Azure DevOps REST API not yet implemented");
+        // Push branch first to ensure it is up to date on the remote
+        await ExecuteGitAsync("push", "-u", _remoteName, currentBranch);
+
+        using var client = new HttpClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _githubToken);
+        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("TestEngine", "1.0"));
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+
+        var payload = new
+        {
+            title,
+            body = description ?? "",
+            head = currentBranch,
+            @base = targetBranch,
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync(
+            $"https://api.github.com/repos/{_githubOwner}/{_githubRepository}/pulls",
+            content);
+
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"GitHub API error {(int)response.StatusCode}: {responseBody}");
+        }
+
+        using var doc = JsonDocument.Parse(responseBody);
+        var prUrl = doc.RootElement.GetProperty("html_url").GetString()
+            ?? throw new InvalidOperationException("Pull request created but URL was not returned");
+
+        return prUrl;
+    }
+
+    private async Task<int> GetOutgoingCommitsCountAsync(string branch)
+    {
+        // Count commits ahead of the remote tracking branch
+        var output = await ExecuteGitBufferedAsync(
+            "rev-list", "--count", $"{_remoteName}/{branch}..{branch}");
+        var trimmed = output.Trim();
+        if (int.TryParse(trimmed, out var count))
+        {
+            return count;
+        }
+        return 0;
     }
 
     private void EnsureRepositoryExists()

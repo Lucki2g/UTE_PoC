@@ -44,4 +44,10 @@ export const api = {
     post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
     put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
     del: <T>(path: string, body?: unknown) => request<T>("DELETE", path, body),
+    stream: (path: string, params?: URLSearchParams): Promise<Response> => {
+        const qs = params?.toString();
+        return fetch(`${API_BASE}${path}${qs ? `?${qs}` : ""}`, {
+            headers: { "X-Api-Key": API_KEY, Accept: "text/event-stream" },
+        });
+    },
 };

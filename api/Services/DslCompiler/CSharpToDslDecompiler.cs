@@ -60,6 +60,31 @@ internal class CSharpToDslDecompiler
             return new DslDecompileResult { Dsl = CreateEmptyDefinition(), Diagnostics = _diagnostics };
         }
 
+        var dsl = DecompileMethod(method);
+        return new DslDecompileResult { Dsl = dsl ?? CreateEmptyDefinition(), Diagnostics = _diagnostics };
+    }
+
+    /// <summary>
+    /// Decompiles all test methods in the file, returning a map of methodName → DslTestDefinition.
+    /// </summary>
+    public Dictionary<string, DslTestDefinition> DecompileAll(string csharpCode)
+    {
+        var tree = CSharpSyntaxTree.ParseText(csharpCode);
+        var root = tree.GetRoot();
+        var result = new Dictionary<string, DslTestDefinition>();
+
+        foreach (var method in _methodParser.FindAllTestMethods(root))
+        {
+            var dsl = DecompileMethod(method);
+            if (dsl != null)
+                result[method.Identifier.Text] = dsl;
+        }
+
+        return result;
+    }
+
+    private DslTestDefinition? DecompileMethod(Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax method)
+    {
         var framework = _methodParser.DetectFramework(method);
         var (kind, ignore, timeoutMs, traits) = _methodParser.ExtractMethodMetadata(method, framework);
         var isAsync = method.Modifiers.Any(m => m.IsKind(SyntaxKind.AsyncKeyword));
@@ -70,9 +95,9 @@ internal class CSharpToDslDecompiler
             _diagnostics.Add(new DslDiagnostic
             {
                 Code    = DslDiagnosticCodes.MissingAaaSections,
-                Message = "Test method has no body."
+                Message = $"Test method '{name}' has no body."
             });
-            return new DslDecompileResult { Dsl = CreateEmptyDefinition(), Diagnostics = _diagnostics };
+            return null;
         }
 
         var (arrangeStmts, actStmts, assertStmts) = _splitter.Split(method.Body);
@@ -81,7 +106,7 @@ internal class CSharpToDslDecompiler
         var act                  = _actParser.ParseActSection(actStmts);
         var (retrievals, assertions) = _assertParser.ParseAssertSection(assertStmts);
 
-        var dsl = new DslTestDefinition
+        return new DslTestDefinition
         {
             DslVersion = "1.2",
             Language   = "csharp-aaa",
@@ -99,8 +124,6 @@ internal class CSharpToDslDecompiler
                 Assert    = new DslAssert { Retrievals = retrievals, Assertions = assertions }
             }
         };
-
-        return new DslDecompileResult { Dsl = dsl, Diagnostics = _diagnostics };
     }
 
     private static DslTestDefinition CreateEmptyDefinition() =>

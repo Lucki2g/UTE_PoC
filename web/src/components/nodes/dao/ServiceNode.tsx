@@ -9,6 +9,7 @@ import {
     MenuPopover,
     MenuTrigger,
     Option,
+    Switch,
     Text,
     makeStyles,
     tokens,
@@ -127,21 +128,51 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
                 </div>
 
                 {!isRetrieve && (
-                    <div className={styles.field}>
-                        <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Target</Text>
-                        <Input
-                            size="small"
-                            value={nodeData.targetBinding ?? ""}
-                            placeholder="binding id"
-                            onChange={(_ev, data) =>
-                                dispatch({
-                                    type: "UPDATE_NODE",
-                                    payload: { id, data: { targetBinding: data.value } },
-                                })
-                            }
-                            style={{ flex: 1 }}
-                        />
-                    </div>
+                    <>
+                        <div className={styles.field}>
+                            <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Target</Text>
+                            <Input
+                                size="small"
+                                value={nodeData.targetBinding ?? ""}
+                                placeholder="binding id"
+                                onChange={(_ev, data) =>
+                                    dispatch({
+                                        type: "UPDATE_NODE",
+                                        payload: { id, data: { targetBinding: data.value } },
+                                    })
+                                }
+                                style={{ flex: 1 }}
+                            />
+                        </div>
+                        <div className={styles.field}>
+                            <Switch
+                                size="small"
+                                label="Delegate"
+                                checked={nodeData.isDelegateAct ?? false}
+                                onChange={(_ev, data) =>
+                                    dispatch({
+                                        type: "UPDATE_NODE",
+                                        payload: { id, data: { isDelegateAct: data.checked } },
+                                    })
+                                }
+                                style={{ fontSize: tokens.fontSizeBase200 }}
+                            />
+                            {nodeData.isDelegateAct && (
+                                <Input
+                                    size="small"
+                                    value={nodeData.delegateVar ?? "action"}
+                                    placeholder="action"
+                                    onChange={(_ev, data) =>
+                                        dispatch({
+                                            type: "UPDATE_NODE",
+                                            payload: { id, data: { delegateVar: data.value } },
+                                        })
+                                    }
+                                    style={{ flex: 1 }}
+                                />
+                            )}
+                        </div>
+                    </>
                 )}
 
                 {isRetrieve && (

@@ -10,6 +10,7 @@ export interface ProducerNodeData {
     variableName: string;
     build: boolean;
     anonymous: boolean;
+    inactivate: boolean;
     withMutations: DslWithMutation[];
     [key: string]: unknown;
 }
@@ -21,6 +22,10 @@ export interface ServiceNodeData {
     resultVar?: string;
     entitySet?: string;
     whereExpressions: WhereEntry[];
+    /** When true, the operation is wrapped in a delegate for throws assertions */
+    isDelegateAct?: boolean;
+    /** Variable name for the delegate (e.g. "action") */
+    delegateVar?: string;
     [key: string]: unknown;
 }
 
@@ -30,6 +35,10 @@ export interface AssertNodeData {
     targetVar?: string;
     targetPath?: string[];
     expectedValue?: string;
+    /** For "throw" assertions: the exception type (e.g. "InvalidPluginExecutionException") */
+    exceptionType?: string;
+    /** For "throw" assertions: expected message passed to .WithMessage(...) */
+    withMessage?: string;
     [key: string]: unknown;
 }
 

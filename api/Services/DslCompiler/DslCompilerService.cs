@@ -21,6 +21,13 @@ public class DslCompilerService : IDslCompilerService
         return Task.FromResult(result);
     }
 
+    public Task<Dictionary<string, DslTestDefinition>> DecompileAllFromCSharpAsync(string csharpCode, IReadOnlyDictionary<string, string>? producerEntityMap = null)
+    {
+        var decompiler = new CSharpToDslDecompiler(producerEntityMap);
+        var result = decompiler.DecompileAll(csharpCode);
+        return Task.FromResult(result);
+    }
+
     public Task<DslValidationResult> ValidateGeneratedCodeAsync(string csharpCode)
     {
         var tree = CSharpSyntaxTree.ParseText(csharpCode);

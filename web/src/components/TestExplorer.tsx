@@ -307,7 +307,7 @@ function TestTreeItem({
     onSelect: (path: string) => void;
     onRun: (testName: string) => void;
     onRunSubset: (filter: string) => void;
-    onOpen: (test: TestMetadata) => void;
+    onOpen: (test: TestMetadata, methodName: string) => void;
 }) {
     const styles = useStyles();
     const isExpanded = expanded.has(node.fullPath);
@@ -391,14 +391,14 @@ function TestTreeItem({
                                 title="Run test"
                             />
                         )}
-                        {isMethod && node.test && (
+                        {isMethod && node.test && node.method && (
                             <Button
                                 appearance="subtle"
                                 size="small"
                                 icon={<BeakerEditRegular className={styles.openIcon} />}
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    onOpen(node.test!);
+                                    onOpen(node.test!, node.method!);
                                 }}
                                 title="Open in builder"
                             />
@@ -526,7 +526,7 @@ export function TestExplorer() {
     const [search, setSearch] = useState("");
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
     const [unsavedWarningOpen, setUnsavedWarningOpen] = useState(false);
-    const pendingTestRef = useRef<TestMetadata | null>(null);
+    const pendingTestRef = useRef<{ test: TestMetadata; methodName: string } | null>(null);
 
     useEffect(() => {
         tests.fetchAll();
@@ -552,26 +552,27 @@ export function TestExplorer() {
         tests.runSubset(filter);
     };
 
-    const openTestDiagram = useCallback((test: TestMetadata) => {
-        if (test.dsl) {
-            const diagram = loadDslToDiagram(test.dsl, test.className);
+    const openTestDiagram = useCallback((test: TestMetadata, methodName: string) => {
+        const dsl = test.methodDsls?.[methodName] ?? test.dsl;
+        if (dsl) {
+            const diagram = loadDslToDiagram(dsl, test.className);
             builderDispatch({ type: "SET_DIAGRAM", payload: diagram });
         }
     }, [builderDispatch]);
 
-    const handleOpenTest = useCallback((test: TestMetadata) => {
+    const handleOpenTest = useCallback((test: TestMetadata, methodName: string) => {
         if (builderState.dirty) {
-            pendingTestRef.current = test;
+            pendingTestRef.current = { test, methodName };
             setUnsavedWarningOpen(true);
         } else {
-            openTestDiagram(test);
+            openTestDiagram(test, methodName);
         }
     }, [builderState.dirty, openTestDiagram]);
 
     const handleConfirmDiscard = useCallback(() => {
         setUnsavedWarningOpen(false);
         if (pendingTestRef.current) {
-            openTestDiagram(pendingTestRef.current);
+            openTestDiagram(pendingTestRef.current.test, pendingTestRef.current.methodName);
             pendingTestRef.current = null;
         }
     }, [openTestDiagram]);

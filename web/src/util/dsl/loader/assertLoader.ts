@@ -69,6 +69,10 @@ export function loadAssert(assert: DslAssert, startY: number): AssertLoaderResul
             targetVar:     a.target.name ?? a.target.rootVar,
             targetPath:    a.target.path ?? [],
             expectedValue: a.expected && "value" in a.expected ? String(a.expected.value) : undefined,
+            ...(a.kind === "throw" ? {
+                exceptionType: a.exceptionType,
+                withMessage:   a.withMessage,
+            } : {}),
         };
 
         assertionNodes.push({

@@ -39,7 +39,16 @@ internal sealed class ActEmitter : DslSubcomponentBase
             call = $"/* UNKNOWN OPERATION: {op.Kind} */";
         }
 
-        if (act.ResultVar != null)
+        if (act.DelegateVar != null)
+        {
+            // Delegate form: var action = () => AdminDao.Update(order);
+            // Strip any await prefix — delegates are not awaited at capture time
+            var syncCall = call.TrimStart();
+            if (syncCall.StartsWith("await ", StringComparison.Ordinal))
+                syncCall = syncCall["await ".Length..];
+            sb.AppendLine($"{indent}var {act.DelegateVar} = () => {syncCall};");
+        }
+        else if (act.ResultVar != null)
             sb.AppendLine($"{indent}var {act.ResultVar} = {call};");
         else
             sb.AppendLine($"{indent}{call};");

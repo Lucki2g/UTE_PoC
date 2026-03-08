@@ -37,8 +37,9 @@ export function generateDsl(
             async:     false,
             arrange: { bindings: generateArrange(producers) },
             act: {
-                resultVar: svcData?.resultVar,
-                operation: generateAct(actServiceNode),
+                resultVar:   svcData?.isDelegateAct ? undefined : svcData?.resultVar,
+                delegateVar: svcData?.isDelegateAct ? (svcData?.delegateVar ?? "action") : undefined,
+                operation:   generateAct(actServiceNode),
             },
             assert: {
                 retrievals: generateRetrievals(retrieveServiceNodes),

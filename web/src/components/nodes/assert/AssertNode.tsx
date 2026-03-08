@@ -21,7 +21,7 @@ import { useBuilderContext } from "../../../contexts/BuilderContext.tsx";
 import { ColumnLookup } from "../../fields/ColumnLookup.tsx";
 import assertIcon from "../../../assets/assert-icon.svg";
 
-const assertionKinds = ["notNull", "be", "containSingle"] as const;
+const assertionKinds = ["notNull", "be", "containSingle", "throw"] as const;
 
 const useStyles = makeStyles({
     node: {
@@ -91,6 +91,9 @@ export function AssertNode({ id, data, selected }: NodeProps<BuilderNode>) {
                 // Derive entity name from entitySet by removing trailing "Set"
                 const entityName = d.entitySet?.replace(/Set$/i, "") ?? null;
                 infos.push({ name: d.resultVar, entityName, isList: d.operation === "RetrieveList" });
+            } else if (d.nodeType === "service" && d.isDelegateAct && d.delegateVar) {
+                // Delegate act variable (e.g. "action") for throws assertions
+                infos.push({ name: d.delegateVar, entityName: null, isList: false });
             }
         }
         return infos;
@@ -102,6 +105,7 @@ export function AssertNode({ id, data, selected }: NodeProps<BuilderNode>) {
     );
 
     const hasExpected = nodeData.assertionKind === "be" || nodeData.assertionKind === "containSingle";
+    const isThrow = nodeData.assertionKind === "throw";
 
     return (
         <div className={`${styles.node} ${selected ? styles.selected : ""}`}>
@@ -154,8 +158,8 @@ export function AssertNode({ id, data, selected }: NodeProps<BuilderNode>) {
                     </Combobox>
                 </div>
 
-                {/* TARGET MEMBER PATH */}
-                {selectedVarInfo && (
+                {/* TARGET MEMBER PATH — hidden for notNull and throw (targets the var directly) */}
+                {selectedVarInfo && nodeData.assertionKind !== "notNull" && !isThrow && (
                     <div className={styles.field}>
                         <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Member</Text>
                         {selectedVarInfo.isList ? (
@@ -248,6 +252,42 @@ export function AssertNode({ id, data, selected }: NodeProps<BuilderNode>) {
                         }
                         style={{ flex: 1 }}
                     />
+                </div>
+            )}
+
+            {/* THROW fields — footer */}
+            {isThrow && (
+                <div className={styles.footer} style={{ flexDirection: "column", alignItems: "stretch", gap: tokens.spacingVerticalXS }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                        <Text size={100} style={{ minWidth: "80px", color: tokens.colorNeutralForeground3 }}>Exception</Text>
+                        <Input
+                            size="small"
+                            value={nodeData.exceptionType ?? ""}
+                            placeholder="InvalidPluginExecutionException"
+                            onChange={(_ev, d) =>
+                                dispatch({
+                                    type: "UPDATE_NODE",
+                                    payload: { id, data: { exceptionType: d.value } },
+                                })
+                            }
+                            style={{ flex: 1 }}
+                        />
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS }}>
+                        <Text size={100} style={{ minWidth: "80px", color: tokens.colorNeutralForeground3 }}>Message</Text>
+                        <Input
+                            size="small"
+                            value={nodeData.withMessage ?? ""}
+                            placeholder="expected exception message"
+                            onChange={(_ev, d) =>
+                                dispatch({
+                                    type: "UPDATE_NODE",
+                                    payload: { id, data: { withMessage: d.value } },
+                                })
+                            }
+                            style={{ flex: 1 }}
+                        />
+                    </div>
                 </div>
             )}
 

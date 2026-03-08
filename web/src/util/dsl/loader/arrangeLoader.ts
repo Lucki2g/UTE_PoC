@@ -27,6 +27,7 @@ export function loadArrange(bindings: DslBinding[], startY: number): ArrangeLoad
             variableName:  binding.var,
             build:         binding.build,
             anonymous:     isAnon,
+            inactivate:    binding.inactivate ?? false,
             withMutations: binding.producer.with,
         };
 

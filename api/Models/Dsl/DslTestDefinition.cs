@@ -85,6 +85,9 @@ public class DslBinding
     [JsonPropertyName("build")]
     public bool Build { get; set; }
 
+    [JsonPropertyName("inactivate")]
+    public bool Inactivate { get; set; }
+
     [JsonPropertyName("expose")]
     public DslExpose? Expose { get; set; }
 }
@@ -122,6 +125,13 @@ public class DslAct
 {
     [JsonPropertyName("resultVar")]
     public string? ResultVar { get; set; }
+
+    /// <summary>
+    /// When set, the operation is wrapped in a delegate: var {DelegateVar} = () => AdminDao.X(...)
+    /// Used for throws assertions: action.Should().Throw&lt;T&gt;().WithMessage(...)
+    /// </summary>
+    [JsonPropertyName("delegateVar")]
+    public string? DelegateVar { get; set; }
 
     [JsonPropertyName("operation")]
     public required DslOperation Operation { get; set; }
@@ -328,6 +338,14 @@ public class DslAssertion
 
     [JsonPropertyName("predicate")]
     public DslPredicate? Predicate { get; set; }
+
+    /// <summary>Exception type name for "throw" assertions (e.g. "InvalidPluginExecutionException").</summary>
+    [JsonPropertyName("exceptionType")]
+    public string? ExceptionType { get; set; }
+
+    /// <summary>Expected exception message for "throw" assertions.</summary>
+    [JsonPropertyName("withMessage")]
+    public string? WithMessage { get; set; }
 }
 
 public class DslAssertionTarget

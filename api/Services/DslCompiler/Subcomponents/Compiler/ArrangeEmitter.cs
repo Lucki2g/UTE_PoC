@@ -24,13 +24,14 @@ internal sealed class ArrangeEmitter : DslSubcomponentBase
         var producerCall = ValueCompiler.ToCSharpProducerCall(binding.Producer.Call);
         var hasWith = binding.Producer.With.Count > 0;
         var hasBuild = binding.Build;
+        var hasInactivate = binding.Inactivate;
         var isAnonymous = binding.Id.StartsWith("_anon", StringComparison.Ordinal);
 
         if (isAnonymous)
         {
             sb.Append($"{indent}{producerCall}()");
         }
-        else if (!hasWith && !hasBuild)
+        else if (!hasWith && !hasBuild && !hasInactivate)
         {
             sb.AppendLine($"{indent}var {binding.Var} = {producerCall}();");
             return;
@@ -47,6 +48,12 @@ internal sealed class ArrangeEmitter : DslSubcomponentBase
             var value = _values.CompileValue(mutation.Value);
             sb.AppendLine();
             sb.Append($"{indent}    .With({lambdaParam} => {lambdaParam}.{mutation.Path} = {value})");
+        }
+
+        if (hasInactivate)
+        {
+            sb.AppendLine();
+            sb.Append($"{indent}    .WithInactivation()");
         }
 
         if (hasBuild)

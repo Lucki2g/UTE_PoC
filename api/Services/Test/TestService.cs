@@ -30,16 +30,18 @@ public class TestService : ITestService
             if (!ContainsTestAttribute(code))
                 continue;
 
-            var decompileResult = await _dslCompiler.DecompileFromCSharpAsync(code, producerEntityMap);
-            var methodNames = ExtractTestMethodNames(code);
+            var methodDsls = await _dslCompiler.DecompileAllFromCSharpAsync(code, producerEntityMap);
+            var methodNames = methodDsls.Count > 0
+                ? methodDsls.Keys.ToList()
+                : ExtractTestMethodNames(code);
 
             results.Add(new TestMetadata
             {
-                ClassName = Path.GetFileNameWithoutExtension(filePath),
-                FilePath = Path.GetRelativePath(_testProjectPath, filePath),
+                ClassName  = Path.GetFileNameWithoutExtension(filePath),
+                FilePath   = Path.GetRelativePath(_testProjectPath, filePath),
                 MethodNames = methodNames,
                 LastModified = File.GetLastWriteTimeUtc(filePath),
-                Dsl = decompileResult.Dsl
+                MethodDsls = methodDsls.Count > 0 ? methodDsls : null,
             });
         }
 

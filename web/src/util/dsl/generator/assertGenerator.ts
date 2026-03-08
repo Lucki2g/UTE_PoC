@@ -44,10 +44,13 @@ export function generateAssertions(asserts: BuilderNode[]): DslAssertion[] {
         const hasPath = d.targetPath && d.targetPath.length > 0;
         const target: DslAssertionTarget = hasPath
             ? { kind: "member", rootVar: d.targetVar ?? "result", path: d.targetPath! }
-            : { kind: "variable", name: d.targetVar ?? "result" };
+            : { kind: "var", name: d.targetVar ?? "result" };
 
         const assertion: DslAssertion = { kind: d.assertionKind, target };
-        if (d.expectedValue !== undefined && d.expectedValue !== "") {
+        if (d.assertionKind === "throw") {
+            if (d.exceptionType) assertion.exceptionType = d.exceptionType;
+            if (d.withMessage)   assertion.withMessage   = d.withMessage;
+        } else if (d.expectedValue !== undefined && d.expectedValue !== "") {
             assertion.expected = parseStringValue(d.expectedValue);
         }
         return assertion;

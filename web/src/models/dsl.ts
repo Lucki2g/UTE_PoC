@@ -102,6 +102,7 @@ export interface DslBinding {
     kind: string;
     producer: DslProducerCall;
     build: boolean;
+    inactivate?: boolean;
     expose?: DslExpose;
 }
 
@@ -124,6 +125,8 @@ export interface DslExpose {
 
 export interface DslAct {
     resultVar?: string;
+    /** When set, wraps the operation in a delegate: var {delegateVar} = () => AdminDao.X(...) */
+    delegateVar?: string;
     operation: DslOperation;
 }
 
@@ -183,6 +186,10 @@ export interface DslAssertion {
     target: DslAssertionTarget;
     expected?: DslValueExpression;
     predicate?: DslPredicate;
+    /** Exception type name for "throw" assertions (e.g. "InvalidPluginExecutionException") */
+    exceptionType?: string;
+    /** Expected exception message for "throw" assertions */
+    withMessage?: string;
 }
 
 export interface DslAssertionTarget {

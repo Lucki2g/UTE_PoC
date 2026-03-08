@@ -32,6 +32,7 @@ internal class DslToCSharpCompiler
             new NotNullAssertionEmitter(),
             new BeAssertionEmitter(_values),
             new ContainSingleAssertionEmitter(_values),
+            new ThrowAssertionEmitter(),
         ]);
     }
 

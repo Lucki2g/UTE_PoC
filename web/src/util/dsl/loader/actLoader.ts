@@ -15,11 +15,12 @@ export interface ActLoaderResult {
 export function loadAct(act: DslAct, startY: number): ActLoaderResult {
     const nodeId  = `svc_${Date.now()}`;
     const svcData: ServiceNodeData = {
-        nodeType:        "service",
-        operation:       mapOperationBack(act.operation.kind),
-        targetBinding:   act.operation.entity?.fromBinding,
-        resultVar:       act.resultVar,
+        nodeType:         "service",
+        operation:        mapOperationBack(act.operation.kind),
+        targetBinding:    act.operation.entity?.fromBinding,
+        resultVar:        act.resultVar,
         whereExpressions: [],
+        ...(act.delegateVar ? { isDelegateAct: true, delegateVar: act.delegateVar } : {}),
     };
 
     const node: BuilderNode = {

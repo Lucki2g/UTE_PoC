@@ -20,18 +20,24 @@ internal sealed class ActParser : DslSubcomponentBase
         foreach (var stmt in statements)
         {
             // var result = await AdminDao.CreateAsync<T>(entity.Entity);
+            // OR: var action = () => AdminDao.Update(order);
             if (stmt is LocalDeclarationStatementSyntax localDecl)
             {
                 var variable = localDecl.Declaration.Variables.FirstOrDefault();
                 if (variable?.Initializer?.Value != null)
                 {
-                    var resultVar  = variable.Identifier.Text;
+                    var varName = variable.Identifier.Text;
+
+                    // Delegate form: var action = () => AdminDao.Update(order);
+                    var delegateAct = TryParseDelegateAct(varName, variable.Initializer.Value);
+                    if (delegateAct != null) return delegateAct;
+
                     var (invokeExpr, awaited) = UnwrapAwait(variable.Initializer.Value);
                     if (invokeExpr != null)
                     {
                         var operation = ParseAdminDaoOperation(invokeExpr, awaited);
                         if (operation != null)
-                            return new DslAct { ResultVar = resultVar, Operation = operation };
+                            return new DslAct { ResultVar = varName, Operation = operation };
                     }
                 }
             }
@@ -50,6 +56,30 @@ internal sealed class ActParser : DslSubcomponentBase
         }
 
         return new DslAct { Operation = new DslOperation { Kind = "create", Awaited = false } };
+    }
+
+    /// <summary>
+    /// Detects: var action = () => AdminDao.Update(order);
+    /// Returns a DslAct with DelegateVar set if matched.
+    /// </summary>
+    private DslAct? TryParseDelegateAct(string varName, ExpressionSyntax initExpr)
+    {
+        ExpressionSyntax? lambdaBody = null;
+
+        if (initExpr is SimpleLambdaExpressionSyntax simpleLambda)
+            lambdaBody = simpleLambda.Body as ExpressionSyntax;
+        else if (initExpr is ParenthesizedLambdaExpressionSyntax parenLambda)
+            lambdaBody = parenLambda.Body as ExpressionSyntax;
+
+        if (lambdaBody == null) return null;
+
+        var (invokeExpr, awaited) = UnwrapAwait(lambdaBody);
+        if (invokeExpr == null) return null;
+
+        var operation = ParseAdminDaoOperation(invokeExpr, awaited);
+        if (operation == null) return null;
+
+        return new DslAct { DelegateVar = varName, Operation = operation };
     }
 
     private static (InvocationExpressionSyntax? invocation, bool awaited) UnwrapAwait(ExpressionSyntax expr)

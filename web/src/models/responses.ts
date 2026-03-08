@@ -41,6 +41,9 @@ export interface TestMetadata {
     filePath: string;
     methodNames: string[];
     lastModified: string;
+    /** Per-method DSL definitions keyed by method name. */
+    methodDsls?: Record<string, DslTestDefinition>;
+    /** @deprecated Use methodDsls[methodName] instead. */
     dsl?: DslTestDefinition;
 }
 

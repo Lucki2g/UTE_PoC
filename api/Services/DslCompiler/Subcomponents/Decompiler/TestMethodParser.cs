@@ -24,6 +24,31 @@ internal sealed class TestMethodParser : DslSubcomponentBase
         return null;
     }
 
+    public MethodDeclarationSyntax? FindTestMethodByName(SyntaxNode root, string methodName)
+    {
+        var methods = root.DescendantNodes().OfType<MethodDeclarationSyntax>();
+        foreach (var method in methods)
+        {
+            if (method.Identifier.Text != methodName) continue;
+            var attrs = method.AttributeLists
+                .SelectMany(al => al.Attributes)
+                .Select(a => a.Name.ToString());
+            if (attrs.Any(a => a is "Fact" or "Theory" or "TestMethod" or "Test"))
+                return method;
+        }
+        return null;
+    }
+
+    public IEnumerable<MethodDeclarationSyntax> FindAllTestMethods(SyntaxNode root)
+    {
+        return root.DescendantNodes()
+            .OfType<MethodDeclarationSyntax>()
+            .Where(m => m.AttributeLists
+                .SelectMany(al => al.Attributes)
+                .Select(a => a.Name.ToString())
+                .Any(a => a is "Fact" or "Theory" or "TestMethod" or "Test"));
+    }
+
     public string DetectFramework(MethodDeclarationSyntax method)
     {
         var attrs = method.AttributeLists

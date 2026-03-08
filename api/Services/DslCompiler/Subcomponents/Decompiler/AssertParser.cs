@@ -214,18 +214,55 @@ internal sealed class AssertParser : DslSubcomponentBase
 
         var assertionMethod = outerAccess.Name.Identifier.Text;
 
+        // Pattern: action.Should().Throw<T>().WithMessage("msg")
+        // outerInvocation = WithMessage("msg"), outerAccess.Expression = Throw<T>() invocation
+        if (assertionMethod == "WithMessage" &&
+            outerAccess.Expression is InvocationExpressionSyntax throwInvocation &&
+            throwInvocation.Expression is MemberAccessExpressionSyntax throwAccess &&
+            throwAccess.Name is GenericNameSyntax throwGenericName &&
+            throwGenericName.Identifier.Text == "Throw")
+        {
+            // Check that Throw chains from .Should()
+            if (throwAccess.Expression is InvocationExpressionSyntax shouldInv2 &&
+                shouldInv2.Expression is MemberAccessExpressionSyntax shouldAcc2 &&
+                shouldAcc2.Name.Identifier.Text == "Should")
+            {
+                var target2 = ExtractAssertionTarget(shouldAcc2.Expression);
+                var exType = throwGenericName.TypeArgumentList.Arguments.FirstOrDefault()?.ToString();
+                string? withMsg = outerInvocation.ArgumentList.Arguments.Count > 0
+                    ? outerInvocation.ArgumentList.Arguments[0].Expression
+                        .ToString().Trim('"')
+                    : null;
+                // Strip surrounding quotes from string literal
+                if (withMsg != null && outerInvocation.ArgumentList.Arguments[0].Expression
+                    is Microsoft.CodeAnalysis.CSharp.Syntax.LiteralExpressionSyntax lit)
+                    withMsg = lit.Token.ValueText;
+
+                return new DslAssertion { Kind = "throw", Target = target2, ExceptionType = exType, WithMessage = withMsg };
+            }
+        }
+
+        // Pattern: action.Should().Throw<T>()  (no WithMessage)
         if (outerAccess.Expression is not InvocationExpressionSyntax shouldInvocation) return null;
         if (shouldInvocation.Expression is not MemberAccessExpressionSyntax shouldAccess) return null;
         if (shouldAccess.Name.Identifier.Text != "Should") return null;
 
         var target = ExtractAssertionTarget(shouldAccess.Expression);
 
+        // Handle Throw<T>() without chaining
+        if (assertionMethod == "Throw" &&
+            outerAccess.Name is GenericNameSyntax throwName)
+        {
+            var exType2 = throwName.TypeArgumentList.Arguments.FirstOrDefault()?.ToString();
+            return new DslAssertion { Kind = "throw", Target = target, ExceptionType = exType2 };
+        }
+
         if (_registry.TryGetValue(assertionMethod, out var parser))
             return parser.Parse(outerInvocation, target);
 
         AddDiagnostic(
             DslDiagnosticCodes.UnsupportedAssertion,
-            $"Unsupported assertion: '.Should().{assertionMethod}(...)'. Only Be, NotBeNull, and ContainSingle are supported.",
+            $"Unsupported assertion: '.Should().{assertionMethod}(...)'. Only Be, NotBeNull, ContainSingle, and Throw are supported.",
             section: "assert",
             hint: expr.ToString());
         return null;
@@ -233,17 +270,18 @@ internal sealed class AssertParser : DslSubcomponentBase
 
     private static DslAssertionTarget ExtractAssertionTarget(ExpressionSyntax expr)
     {
-        // Null-conditional: retrievedAccount?.Name
+        // Null-conditional: retrievedAccount?.Name  or  retrievedAccount?.Ref.Id
         if (expr is ConditionalAccessExpressionSyntax conditionalAccess)
         {
             var rootVar = conditionalAccess.Expression.ToString();
-            if (conditionalAccess.WhenNotNull is MemberBindingExpressionSyntax memberBinding)
+            var path = ExtractConditionalPath(conditionalAccess.WhenNotNull);
+            if (path.Count > 0)
             {
                 return new DslAssertionTarget
                 {
                     Kind    = "member",
                     RootVar = rootVar,
-                    Path    = [memberBinding.Name.Identifier.Text]
+                    Path    = path
                 };
             }
             return new DslAssertionTarget { Kind = "var", Name = rootVar };
@@ -274,5 +312,29 @@ internal sealed class AssertParser : DslSubcomponentBase
             return new DslAssertionTarget { Kind = "var", Name = identifier.Identifier.Text };
 
         return new DslAssertionTarget { Kind = "var", Name = expr.ToString() };
+    }
+
+    /// <summary>
+    /// Walks the WhenNotNull portion of a ConditionalAccessExpression to collect path segments.
+    /// Handles: ?.Name  (MemberBindingExpression)
+    ///      and ?.Ref.Id  (MemberAccessExpression on MemberBindingExpression)
+    /// </summary>
+    private static List<string> ExtractConditionalPath(ExpressionSyntax whenNotNull)
+    {
+        var parts = new List<string>();
+
+        // Walk MemberAccessExpressionSyntax chain first (e.g. ?.ape_orderid.Id)
+        var current = whenNotNull;
+        while (current is MemberAccessExpressionSyntax ma)
+        {
+            parts.Insert(0, ma.Name.Identifier.Text);
+            current = ma.Expression;
+        }
+
+        // The root of the chain should be a MemberBindingExpression (e.g. ?.ape_orderid)
+        if (current is MemberBindingExpressionSyntax binding)
+            parts.Insert(0, binding.Name.Identifier.Text);
+
+        return parts;
     }
 }

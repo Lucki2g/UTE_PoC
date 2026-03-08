@@ -251,6 +251,18 @@ export function ProducerNode({ id, data, selected }: NodeProps<BuilderNode>) {
                         }
                         style={{ fontSize: tokens.fontSizeBase200 }}
                     />
+                    <Switch
+                        size="small"
+                        label="Inactivate"
+                        checked={nodeData.inactivate ?? false}
+                        onChange={(_ev, data) =>
+                            dispatch({
+                                type: "UPDATE_NODE",
+                                payload: { id, data: { inactivate: data.checked } },
+                            })
+                        }
+                        style={{ fontSize: tokens.fontSizeBase200 }}
+                    />
                 </div>
             </div>
 

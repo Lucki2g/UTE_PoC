@@ -53,6 +53,7 @@ internal sealed class ArrangeParser : DslSubcomponentBase
     {
         var withMutations = new List<DslWithMutation>();
         var hasBuild = false;
+        var hasInactivate = false;
         string? producerCall = null;
 
         var current = expr;
@@ -66,6 +67,13 @@ internal sealed class ArrangeParser : DslSubcomponentBase
                 if (methodName == "Build")
                 {
                     hasBuild = true;
+                    current = memberAccess.Expression;
+                    continue;
+                }
+
+                if (methodName == "WithInactivation")
+                {
+                    hasInactivate = true;
                     current = memberAccess.Expression;
                     continue;
                 }
@@ -106,11 +114,12 @@ internal sealed class ArrangeParser : DslSubcomponentBase
 
         return new DslBinding
         {
-            Id       = varName,
-            Var      = varName,
-            Kind     = "producerDraft",
-            Producer = new DslProducerCall { Call = normalizedCall, With = withMutations },
-            Build    = hasBuild
+            Id         = varName,
+            Var        = varName,
+            Kind       = "producerDraft",
+            Producer   = new DslProducerCall { Call = normalizedCall, With = withMutations },
+            Build      = hasBuild,
+            Inactivate = hasInactivate
         };
     }
 

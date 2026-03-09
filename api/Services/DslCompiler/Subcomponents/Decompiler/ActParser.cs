@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using TestEngine.Models.Dsl;
 
@@ -6,17 +7,22 @@ namespace TestEngine.Services.DslCompiler;
 internal sealed class ActParser : DslSubcomponentBase
 {
     private readonly IReadOnlyDictionary<string, IActOperationParser> _registry;
+    private readonly ExpressionDecompiler _expr;
 
     public ActParser(
         List<DslDiagnostic> diagnostics,
-        IEnumerable<IActOperationParser> operations)
+        IEnumerable<IActOperationParser> operations,
+        ExpressionDecompiler? expr = null)
         : base(diagnostics)
     {
         _registry = operations.ToDictionary(o => o.NormalizedMethodName, StringComparer.Ordinal);
+        _expr = expr ?? new ExpressionDecompiler(diagnostics);
     }
 
     public DslAct ParseActSection(List<StatementSyntax> statements)
     {
+        var mutations = new List<DslActMutation>();
+
         foreach (var stmt in statements)
         {
             // var result = await AdminDao.CreateAsync<T>(entity.Entity);
@@ -29,7 +35,7 @@ internal sealed class ActParser : DslSubcomponentBase
                     var varName = variable.Identifier.Text;
 
                     // Delegate form: var action = () => AdminDao.Update(order);
-                    var delegateAct = TryParseDelegateAct(varName, variable.Initializer.Value);
+                    var delegateAct = TryParseDelegateAct(varName, variable.Initializer.Value, mutations);
                     if (delegateAct != null) return delegateAct;
 
                     var (invokeExpr, awaited) = UnwrapAwait(variable.Initializer.Value);
@@ -37,7 +43,10 @@ internal sealed class ActParser : DslSubcomponentBase
                     {
                         var operation = ParseAdminDaoOperation(invokeExpr, awaited);
                         if (operation != null)
+                        {
+                            AttachMutations(operation, mutations);
                             return new DslAct { ResultVar = varName, Operation = operation };
+                        }
                     }
                 }
             }
@@ -45,12 +54,26 @@ internal sealed class ActParser : DslSubcomponentBase
             // await AdminDao.UpdateAsync<T>(entity.Entity);  (no result variable)
             if (stmt is ExpressionStatementSyntax exprStmt)
             {
-                var (invokeExpr, awaited) = UnwrapAwait(exprStmt.Expression);
-                if (invokeExpr != null)
+                // Property assignment: order.ape_orderstatus = ape_orderstatus.Readyforpickup;
+                if (exprStmt.Expression is AssignmentExpressionSyntax { RawKind: (int)SyntaxKind.SimpleAssignmentExpression } simpleAssign &&
+                    simpleAssign.Left is MemberAccessExpressionSyntax memberLeft)
                 {
-                    var operation = ParseAdminDaoOperation(invokeExpr, awaited);
+                    var targetVar = memberLeft.Expression.ToString();
+                    var path      = memberLeft.Name.Identifier.Text;
+                    var value     = _expr.DecompileExpression(simpleAssign.Right);
+                    mutations.Add(new DslActMutation { TargetVar = targetVar, Path = path, Value = value });
+                    continue;
+                }
+
+                var (invokeExpr2, awaited2) = UnwrapAwait(exprStmt.Expression);
+                if (invokeExpr2 != null)
+                {
+                    var operation = ParseAdminDaoOperation(invokeExpr2, awaited2);
                     if (operation != null)
+                    {
+                        AttachMutations(operation, mutations);
                         return new DslAct { ResultVar = null, Operation = operation };
+                    }
                 }
             }
         }
@@ -58,11 +81,17 @@ internal sealed class ActParser : DslSubcomponentBase
         return new DslAct { Operation = new DslOperation { Kind = "create", Awaited = false } };
     }
 
+    private static void AttachMutations(DslOperation operation, List<DslActMutation> mutations)
+    {
+        if (mutations.Count > 0)
+            operation.Mutations = [..mutations];
+    }
+
     /// <summary>
     /// Detects: var action = () => AdminDao.Update(order);
     /// Returns a DslAct with DelegateVar set if matched.
     /// </summary>
-    private DslAct? TryParseDelegateAct(string varName, ExpressionSyntax initExpr)
+    private DslAct? TryParseDelegateAct(string varName, ExpressionSyntax initExpr, List<DslActMutation> mutations)
     {
         ExpressionSyntax? lambdaBody = null;
 
@@ -79,6 +108,7 @@ internal sealed class ActParser : DslSubcomponentBase
         var operation = ParseAdminDaoOperation(invokeExpr, awaited);
         if (operation == null) return null;
 
+        AttachMutations(operation, mutations);
         return new DslAct { DelegateVar = varName, Operation = operation };
     }
 

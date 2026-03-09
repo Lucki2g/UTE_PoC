@@ -207,8 +207,86 @@ internal sealed class AssertParser : DslSubcomponentBase
         return null;
     }
 
+    /// <summary>
+    /// Handles the form: retrievedOrder?.ape_orderstatus.Should().Be(x)
+    ///                or: retrievedOrder?.ape_orderid.Id.Should().Be(x)
+    /// where the entire expression is a ConditionalAccessExpression because of the ?. operator.
+    ///
+    /// AST shape of WhenNotNull:
+    ///   InvocationExpr [Be(x)]
+    ///     MemberAccess [.Be]
+    ///       InvocationExpr [Should()]
+    ///         MemberAccess [.Should]
+    ///           MemberAccess [.ape_orderstatus]  (or chain .ape_orderid.Id)
+    ///             MemberBindingExpr [?.implicit]
+    /// </summary>
+    private DslAssertion? TryParseConditionalAssertion(ConditionalAccessExpressionSyntax conditionalAssert)
+    {
+        var rootVar = conditionalAssert.Expression.ToString();
+
+        // WhenNotNull must be the outermost invocation (e.g. Be(...))
+        if (conditionalAssert.WhenNotNull is not InvocationExpressionSyntax outerInvocation) return null;
+        if (outerInvocation.Expression is not MemberAccessExpressionSyntax outerAccess) return null;
+
+        var assertionMethod = outerAccess.Name.Identifier.Text;
+
+        // The receiver of the assertion must be Should()
+        if (outerAccess.Expression is not InvocationExpressionSyntax shouldInvocation) return null;
+        if (shouldInvocation.Expression is not MemberAccessExpressionSyntax shouldAccess) return null;
+        if (shouldAccess.Name.Identifier.Text != "Should") return null;
+
+        // Everything between the MemberBinding and .Should() is the member path
+        var pathSegments = ExtractConditionalPathFromShouldTarget(shouldAccess.Expression);
+
+        var target = new DslAssertionTarget
+        {
+            Kind    = pathSegments.Count > 0 ? "member" : "var",
+            RootVar = rootVar,
+            Path    = pathSegments.Count > 0 ? pathSegments : null,
+            Name    = pathSegments.Count > 0 ? null : rootVar,
+        };
+
+        if (_registry.TryGetValue(assertionMethod, out var parser))
+            return parser.Parse(outerInvocation, target);
+
+        AddDiagnostic(
+            DslDiagnosticCodes.UnsupportedAssertion,
+            $"Unsupported assertion: '.Should().{assertionMethod}(...)'. Only Be, NotBeNull, ContainSingle, and Throw are supported.",
+            section: "assert",
+            hint: conditionalAssert.ToString());
+        return null;
+    }
+
+    /// <summary>
+    /// Extracts path segments from the expression that precedes .Should() inside a conditional access.
+    /// e.g. for ?.ape_orderstatus.Should(), the input is the MemberBindingExpression (.ape_orderstatus).
+    ///      for ?.ape_orderid.Id.Should(), the input is MemberAccess(.ape_orderid .Id => MemberBinding).
+    /// </summary>
+    private static List<string> ExtractConditionalPathFromShouldTarget(ExpressionSyntax expr)
+    {
+        var parts = new List<string>();
+        var current = expr;
+
+        while (current is MemberAccessExpressionSyntax ma)
+        {
+            parts.Insert(0, ma.Name.Identifier.Text);
+            current = ma.Expression;
+        }
+
+        if (current is MemberBindingExpressionSyntax binding)
+            parts.Insert(0, binding.Name.Identifier.Text);
+
+        return parts;
+    }
+
     private DslAssertion? TryParseAssertion(ExpressionSyntax expr)
     {
+        // Pattern: retrievedOrder?.ape_orderstatus.Should().Be(x)
+        // The whole expression is a ConditionalAccessExpression — unwrap it by normalising
+        // to a (rootVar, path-before-Should, outerInvocation) triple.
+        if (expr is ConditionalAccessExpressionSyntax conditionalAssert)
+            return TryParseConditionalAssertion(conditionalAssert);
+
         if (expr is not InvocationExpressionSyntax outerInvocation) return null;
         if (outerInvocation.Expression is not MemberAccessExpressionSyntax outerAccess) return null;
 

@@ -8,6 +8,12 @@ export function generateAct(actServiceNode: BuilderNode | null): DslOperation {
         return { kind: "create", awaited: false, unawaitedVariant: false };
     }
     const d = actServiceNode.data as ServiceNodeData;
+    const mutations = d.withMutations?.map((m) => ({
+        targetVar: d.targetBinding ?? "",
+        path:      m.path,
+        value:     m.value,
+    }));
+
     return {
         kind:             mapOperationKind(d.operation),
         awaited:          false,
@@ -15,5 +21,6 @@ export function generateAct(actServiceNode: BuilderNode | null): DslOperation {
         ...(d.targetBinding
             ? { entity: { fromBinding: d.targetBinding, member: "Entity" } }
             : {}),
+        ...(mutations?.length ? { mutations } : {}),
     };
 }

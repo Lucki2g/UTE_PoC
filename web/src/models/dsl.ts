@@ -140,6 +140,14 @@ export interface DslOperation {
     target?: DslValueExpression;
     related?: DslRelated;
     unawaitedVariant: boolean;
+    /** Pre-mutations applied to the target entity before the operation */
+    mutations?: DslActMutation[];
+}
+
+export interface DslActMutation {
+    targetVar: string;
+    path: string;
+    value: DslValueExpression;
 }
 
 export interface DslEntityRef {

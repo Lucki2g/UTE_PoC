@@ -165,6 +165,25 @@ public class DslOperation
 
     [JsonPropertyName("unawaitedVariant")]
     public bool UnawaitedVariant { get; set; }
+
+    /// <summary>Pre-mutations applied to the target entity before the operation (e.g. order.Status = X).</summary>
+    [JsonPropertyName("mutations")]
+    public List<DslActMutation>? Mutations { get; set; }
+}
+
+public class DslActMutation
+{
+    /// <summary>Variable name whose property is mutated (e.g. "order").</summary>
+    [JsonPropertyName("targetVar")]
+    public required string TargetVar { get; set; }
+
+    /// <summary>Property path on the entity (e.g. "ape_orderstatus").</summary>
+    [JsonPropertyName("path")]
+    public required string Path { get; set; }
+
+    /// <summary>Value assigned to the property.</summary>
+    [JsonPropertyName("value")]
+    public required DslValueExpression Value { get; set; }
 }
 
 public class DslEntityRef

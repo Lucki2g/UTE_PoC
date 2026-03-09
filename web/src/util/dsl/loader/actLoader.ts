@@ -21,6 +21,9 @@ export function loadAct(act: DslAct, startY: number): ActLoaderResult {
         resultVar:        act.resultVar,
         whereExpressions: [],
         ...(act.delegateVar ? { isDelegateAct: true, delegateVar: act.delegateVar } : {}),
+        ...(act.operation.mutations?.length
+            ? { withMutations: act.operation.mutations.map((m) => ({ path: m.path, value: m.value })) }
+            : {}),
     };
 
     const node: BuilderNode = {

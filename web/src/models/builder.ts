@@ -1,5 +1,5 @@
 import type { Node, Edge } from "@xyflow/react";
-import type { DslWithMutation } from "./dsl.ts";
+import type { DslWithMutation, DslValueExpression } from "./dsl.ts";
 
 // ─── Node data types ─────────────────────────────────────────────────────────
 
@@ -26,6 +26,8 @@ export interface ServiceNodeData {
     isDelegateAct?: boolean;
     /** Variable name for the delegate (e.g. "action") */
     delegateVar?: string;
+    /** Pre-mutations on the target entity before the operation (Update only) */
+    withMutations?: DslWithMutation[];
     [key: string]: unknown;
 }
 
@@ -34,7 +36,8 @@ export interface AssertNodeData {
     assertionKind: string;
     targetVar?: string;
     targetPath?: string[];
-    expectedValue?: string;
+    /** Full DSL value expression for the expected value (enum, ref, string, number…) */
+    expectedDsl?: DslValueExpression;
     /** For "throw" assertions: the exception type (e.g. "InvalidPluginExecutionException") */
     exceptionType?: string;
     /** For "throw" assertions: expected message passed to .WithMessage(...) */

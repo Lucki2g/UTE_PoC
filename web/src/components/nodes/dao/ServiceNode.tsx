@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import {
     Input,
@@ -15,9 +16,10 @@ import {
     tokens,
 } from "@fluentui/react-components";
 import { DeleteRegular, MoreHorizontalRegular } from "@fluentui/react-icons";
-import type { BuilderNode, ServiceNodeData } from "../../../models/builder.ts";
+import type { BuilderNode, ServiceNodeData, ProducerNodeData } from "../../../models/builder.ts";
 import { useBuilderContext } from "../../../contexts/BuilderContext.tsx";
 import dataverseserviceIcon from "../../../assets/dataverseservice-icon.svg";
+import { WithRow } from "../producer/withs/WithRow.tsx";
 
 const operations = ["Create", "Update", "RetrieveSingle", "RetrieveList", "Delete"] as const;
 
@@ -62,6 +64,9 @@ const useStyles = makeStyles({
         borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
         paddingTop: tokens.spacingVerticalXS,
         marginTop: tokens.spacingVerticalXXS,
+        display: "flex",
+        flexDirection: "column",
+        gap: tokens.spacingVerticalXS,
     },
     withRow: {
         display: "flex",
@@ -74,11 +79,22 @@ const useStyles = makeStyles({
 
 export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
     const nodeData = data as ServiceNodeData;
-    const { dispatch } = useBuilderContext();
+    const { state, dispatch } = useBuilderContext();
     const styles = useStyles();
 
     const isRetrieve = nodeData.operation === "RetrieveList"
         || nodeData.operation === "RetrieveSingle";
+    const isUpdate = nodeData.operation === "Update";
+
+    // For Update With blocks: find the producer that matches targetBinding to get entity name
+    const targetProducer = useMemo(() => {
+        if (!isUpdate || !nodeData.targetBinding) return null;
+        return state.nodes
+            .map((n) => n.data as ProducerNodeData)
+            .find((d) => d.nodeType === "producer" && d.variableName === nodeData.targetBinding) ?? null;
+    }, [isUpdate, nodeData.targetBinding, state.nodes]);
+
+    const withMutations = nodeData.withMutations ?? [];
 
     return (
         <div className={`${styles.node} ${selected ? styles.selected : ""}`}>
@@ -173,6 +189,36 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
                             )}
                         </div>
                     </>
+                )}
+
+                {/* WITH MUTATIONS — Update only, shown when target resolves to a known producer */}
+                {isUpdate && targetProducer && withMutations.length > 0 && (
+                    <div className={styles.section}>
+                        {withMutations.map((m, i) => (
+                            <WithRow
+                                key={i}
+                                dsl={m}
+                                entityName={targetProducer.entityName}
+                                previousProducers={[]}
+                                onPathChange={(path) => {
+                                    const updated = [...withMutations];
+                                    updated[i] = { ...m, path };
+                                    dispatch({
+                                        type: "UPDATE_NODE",
+                                        payload: { id, data: { withMutations: updated } },
+                                    });
+                                }}
+                                onValueChange={(value) => {
+                                    const updated = [...withMutations];
+                                    updated[i] = { ...m, value };
+                                    dispatch({
+                                        type: "UPDATE_NODE",
+                                        payload: { id, data: { withMutations: updated } },
+                                    });
+                                }}
+                            />
+                        ))}
+                    </div>
                 )}
 
                 {isRetrieve && (

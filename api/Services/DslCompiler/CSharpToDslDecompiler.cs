@@ -34,7 +34,7 @@ internal class CSharpToDslDecompiler
             new DeleteOperationParser(expr),
             new RelationshipOperationParser(expr, "AssociateEntities",    "associate"),
             new RelationshipOperationParser(expr, "DisassociateEntities", "disassociate"),
-        ]);
+        ], expr);
 
         _assertParser = new AssertParser(_diagnostics, expr,
         [

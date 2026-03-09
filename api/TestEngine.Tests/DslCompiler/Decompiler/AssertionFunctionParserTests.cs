@@ -91,4 +91,32 @@ public class AssertionFunctionParserTests
         Assert.Equal("containSingle", result!.Kind);
         Assert.Null(result.Predicate);
     }
+
+    // ─── BeAssertionParser — typed expected values ────────────────────────────
+
+    [Fact]
+    public void BeParser_WithEnumArg_ReturnsEnumValue()
+    {
+        var parser = new BeAssertionParser(_expr);
+        var (outer, target) = ParseAssertion("x.Should().Be(ape_orderstatus.Placed)");
+        var result = parser.Parse(outer, target);
+
+        Assert.NotNull(result);
+        var ev = Assert.IsType<DslEnumValue>(result!.Expected);
+        Assert.Equal("ape_orderstatus", ev.EnumType);
+        Assert.Equal("Placed",          ev.Member);
+    }
+
+    [Fact]
+    public void BeParser_WithRefMemberArg_ReturnsRefValue()
+    {
+        var parser = new BeAssertionParser(_expr);
+        var (outer, target) = ParseAssertion("x.Should().Be(order.Id)");
+        var result = parser.Parse(outer, target);
+
+        Assert.NotNull(result);
+        var rv = Assert.IsType<DslRefValue>(result!.Expected);
+        Assert.Equal("order", rv.Ref.Id);
+        Assert.Equal("Id",    rv.Ref.Member);
+    }
 }

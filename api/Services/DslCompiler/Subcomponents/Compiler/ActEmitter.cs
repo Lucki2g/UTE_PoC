@@ -39,6 +39,16 @@ internal sealed class ActEmitter : DslSubcomponentBase
             call = $"/* UNKNOWN OPERATION: {op.Kind} */";
         }
 
+        // Emit pre-mutations (property assignments before the operation)
+        if (op.Mutations != null)
+        {
+            foreach (var mutation in op.Mutations)
+            {
+                var valueStr = _values.CompileValue(mutation.Value);
+                sb.AppendLine($"{indent}{mutation.TargetVar}.{mutation.Path} = {valueStr};");
+            }
+        }
+
         if (act.DelegateVar != null)
         {
             // Delegate form: var action = () => AdminDao.Update(order);

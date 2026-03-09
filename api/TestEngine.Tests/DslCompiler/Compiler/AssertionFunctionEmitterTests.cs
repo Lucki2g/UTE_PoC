@@ -102,4 +102,49 @@ public class AssertionFunctionEmitterTests
         };
         Assert.Equal("items.Should().ContainSingle();", Emit(emitter, assertion, "items"));
     }
+
+    // ─── Throw ─────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Throw_NoMessage_EmitsShouldThrow()
+    {
+        var emitter   = new ThrowAssertionEmitter();
+        var assertion = new DslAssertion
+        {
+            Kind          = "throw",
+            Target        = new DslAssertionTarget { Kind = "var", Name = "action" },
+            ExceptionType = "InvalidPluginExecutionException"
+        };
+        Assert.Equal(
+            "action.Should().Throw<InvalidPluginExecutionException>();",
+            Emit(emitter, assertion, "action"));
+    }
+
+    [Fact]
+    public void Throw_WithMessage_EmitsShouldThrowWithMessage()
+    {
+        var emitter   = new ThrowAssertionEmitter();
+        var assertion = new DslAssertion
+        {
+            Kind          = "throw",
+            Target        = new DslAssertionTarget { Kind = "var", Name = "action" },
+            ExceptionType = "InvalidPluginExecutionException",
+            WithMessage   = "Order cannot be placed."
+        };
+        Assert.Equal(
+            "action.Should().Throw<InvalidPluginExecutionException>().WithMessage(\"Order cannot be placed.\");",
+            Emit(emitter, assertion, "action"));
+    }
+
+    [Fact]
+    public void Throw_NoExceptionType_DefaultsToException()
+    {
+        var emitter   = new ThrowAssertionEmitter();
+        var assertion = new DslAssertion
+        {
+            Kind   = "throw",
+            Target = new DslAssertionTarget { Kind = "var", Name = "action" }
+        };
+        Assert.Equal("action.Should().Throw<Exception>();", Emit(emitter, assertion, "action"));
+    }
 }

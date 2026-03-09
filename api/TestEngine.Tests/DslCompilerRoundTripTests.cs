@@ -396,6 +396,165 @@ public class DslCompilerRoundTripTests
         Assert.Equal("notNull", dsl.Test.Assert.Assertions[0].Kind);
     }
 
+    // ─── Test: property mutations in act section ─────────────────────────────
+
+    [Fact]
+    public async Task ActPropertyMutations_RoundTrip()
+    {
+        var input = WrapInClass("""
+            [Fact]
+            public void OrderStatusChanged()
+            {
+                // Arrange
+                var order = Producer.DraftValidAccount().Build();
+
+                // Act
+                order.ape_orderstatus = ape_orderstatus.Placed;
+                AdminDao.Update(order.Entity);
+
+                // Assert
+                var retrieved = AdminDao.RetrieveFirstOrDefault(
+                    xrm => xrm.AccountSet.Where(a => a.Id == order.Entity.Id));
+                retrieved.Should().NotBeNull();
+            }
+            """);
+
+        var (dsl, recompiled, diagnostics) = await RoundTrip(input);
+
+        Assert.Empty(diagnostics);
+
+        // Act: update with one pre-mutation
+        Assert.Equal("update", dsl.Test.Act.Operation.Kind);
+        Assert.NotNull(dsl.Test.Act.Operation.Mutations);
+        Assert.Single(dsl.Test.Act.Operation.Mutations!);
+        Assert.Equal("order",           dsl.Test.Act.Operation.Mutations![0].TargetVar);
+        Assert.Equal("ape_orderstatus", dsl.Test.Act.Operation.Mutations![0].Path);
+
+        // Recompiled code preserves the assignment before the Update call
+        Assert.Contains("order.ape_orderstatus =", recompiled);
+        Assert.Contains("AdminDao.Update(", recompiled);
+        // Assignment must appear before Update in the output
+        var assignPos = recompiled.IndexOf("order.ape_orderstatus =", StringComparison.Ordinal);
+        var updatePos = recompiled.IndexOf("AdminDao.Update(", StringComparison.Ordinal);
+        Assert.True(assignPos < updatePos);
+    }
+
+    // ─── Test: delegate act with Throw assertion ──────────────────────────────
+
+    [Fact]
+    public async Task DelegateActWithThrow_RoundTrip()
+    {
+        var input = WrapInClass("""
+            [Fact]
+            public void UpdateThrowsWhenInvalid()
+            {
+                // Arrange
+                var order = Producer.DraftValidAccount().Build();
+
+                // Act
+                order.ape_orderstatus = ape_orderstatus.Placed;
+                var action = () => AdminDao.Update(order.Entity);
+
+                // Assert
+                action.Should().Throw<InvalidPluginExecutionException>().WithMessage("Order cannot be placed.");
+            }
+            """);
+
+        var (dsl, recompiled, diagnostics) = await RoundTrip(input);
+
+        Assert.Empty(diagnostics);
+
+        // Delegate act
+        Assert.NotNull(dsl.Test.Act.DelegateVar);
+        Assert.Equal("action", dsl.Test.Act.DelegateVar);
+        Assert.Equal("update", dsl.Test.Act.Operation.Kind);
+
+        // Throw assertion with message
+        Assert.Single(dsl.Test.Assert.Assertions);
+        var assertion = dsl.Test.Assert.Assertions[0];
+        Assert.Equal("throw", assertion.Kind);
+        Assert.Equal("InvalidPluginExecutionException", assertion.ExceptionType);
+        Assert.Equal("Order cannot be placed.", assertion.WithMessage);
+
+        // Recompiled fidelity
+        Assert.Contains("var action = () => AdminDao.Update(", recompiled);
+        Assert.Contains(".Should().Throw<InvalidPluginExecutionException>()", recompiled);
+        Assert.Contains(".WithMessage(\"Order cannot be placed.\")", recompiled);
+    }
+
+    // ─── Test: conditional-access assertions ─────────────────────────────────
+
+    [Fact]
+    public async Task ConditionalAccessAssertions_RoundTrip()
+    {
+        var input = WrapInClass("""
+            [Fact]
+            public void OrderStatusAndRefAsserted()
+            {
+                // Arrange
+                var order = Producer.DraftValidAccount().Build();
+
+                // Act
+                AdminDao.Create(order.Entity);
+
+                // Assert
+                var retrieved = AdminDao.RetrieveFirstOrDefault(xrm => xrm.AccountSet.Where(a => a.Id == order.Entity.Id));
+                retrieved.Should().NotBeNull();
+                retrieved?.ape_orderstatus.Should().Be(ape_orderstatus.Placed);
+            }
+            """);
+
+        var (dsl, recompiled, diagnostics) = await RoundTrip(input);
+
+        Assert.Empty(diagnostics);
+
+        // Two assertions: notNull + be (conditional access)
+        Assert.Equal(2, dsl.Test.Assert.Assertions.Count);
+        Assert.Equal("notNull", dsl.Test.Assert.Assertions[0].Kind);
+
+        var beAssertion = dsl.Test.Assert.Assertions[1];
+        Assert.Equal("be",     beAssertion.Kind);
+        Assert.Equal("member", beAssertion.Target.Kind);
+        Assert.Equal(["ape_orderstatus"], beAssertion.Target.Path);
+
+        Assert.Contains("retrieved?.ape_orderstatus.Should().Be(", recompiled);
+    }
+
+    // ─── Test: two-level conditional access (?.ref.Id) ────────────────────────
+
+    [Fact]
+    public async Task TwoLevelConditionalAccessAssertion_RoundTrip()
+    {
+        var input = WrapInClass("""
+            [Fact]
+            public void OrderDeliveryRefAsserted()
+            {
+                // Arrange
+                var order = Producer.DraftValidAccount().Build();
+
+                // Act
+                AdminDao.Create(order.Entity);
+
+                // Assert
+                var delivery = AdminDao.RetrieveFirstOrDefault(xrm => xrm.AccountSet);
+                delivery.Should().NotBeNull();
+                delivery?.ape_orderid.Id.Should().Be(order.Id);
+            }
+            """);
+
+        var (dsl, recompiled, diagnostics) = await RoundTrip(input);
+
+        Assert.Empty(diagnostics);
+
+        Assert.Equal(2, dsl.Test.Assert.Assertions.Count);
+        var idAssertion = dsl.Test.Assert.Assertions[1];
+        Assert.Equal("be",     idAssertion.Kind);
+        Assert.Equal("member", idAssertion.Target.Kind);
+        Assert.Equal(["ape_orderid", "Id"], idAssertion.Target.Path);
+
+        Assert.Contains("delivery?.ape_orderid.Id.Should().Be(", recompiled);
+    }
+
     // ─── Test: DSL -> C# -> DSL stability (double round-trip) ────────────────
 
     [Fact]

@@ -50,8 +50,8 @@ export function generateAssertions(asserts: BuilderNode[]): DslAssertion[] {
         if (d.assertionKind === "throw") {
             if (d.exceptionType) assertion.exceptionType = d.exceptionType;
             if (d.withMessage)   assertion.withMessage   = d.withMessage;
-        } else if (d.expectedValue !== undefined && d.expectedValue !== "") {
-            assertion.expected = parseStringValue(d.expectedValue);
+        } else if (d.expectedDsl != null) {
+            assertion.expected = d.expectedDsl;
         }
         return assertion;
     });

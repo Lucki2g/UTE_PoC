@@ -17,11 +17,14 @@ import {
 } from "@fluentui/react-components";
 import { DeleteRegular, MoreHorizontalRegular } from "@fluentui/react-icons";
 import type { BuilderNode, AssertNodeData, ProducerNodeData, ServiceNodeData } from "../../../models/builder.ts";
+import type { DslValueExpression } from "../../../models/dsl.ts";
 import { useBuilderContext } from "../../../contexts/BuilderContext.tsx";
 import { ColumnLookup } from "../../fields/ColumnLookup.tsx";
+import { useEntityColumns } from "../../../hooks/useEntityColumns.ts";
 import assertIcon from "../../../assets/assert-icon.svg";
 
 const assertionKinds = ["notNull", "be", "containSingle", "throw"] as const;
+const entityRefSubProperties = ["Id", "Name"] as const;
 
 const useStyles = makeStyles({
     node: {
@@ -73,6 +76,244 @@ interface VarInfo {
     name: string;
     entityName: string | null;
     isList: boolean;
+}
+
+/** Renders the column picker (and optional sub-property for EntityReference columns) */
+function MemberPicker({
+    id,
+    nodeData,
+    selectedVarInfo,
+}: {
+    id: string;
+    nodeData: AssertNodeData;
+    selectedVarInfo: VarInfo;
+}) {
+    const { dispatch } = useBuilderContext();
+    const { columns } = useEntityColumns(selectedVarInfo.entityName ?? "");
+
+    const selectedColumn = nodeData.targetPath?.[0] ?? "";
+    const columnInfo = useMemo(
+        () => columns.find((c) => c.logicalName === selectedColumn),
+        [columns, selectedColumn],
+    );
+    const isEntityRef = columnInfo?.dataType.replace("?", "").trim() === "EntityReference";
+
+    const setPath = (col: string, sub?: string) => {
+        const path: string[] = col ? (sub ? [col, sub] : [col]) : [];
+        dispatch({ type: "UPDATE_NODE", payload: { id, data: { targetPath: path } } });
+    };
+
+    if (selectedVarInfo.isList) {
+        return (
+            <Combobox
+                size="small"
+                freeform
+                value={nodeData.targetPath?.[0] ?? ""}
+                selectedOptions={nodeData.targetPath?.[0] ? [nodeData.targetPath[0]] : []}
+                onOptionSelect={(_ev, d) => setPath(d.optionText ?? d.optionValue ?? "")}
+                onChange={(ev) => setPath(ev.target.value)}
+                style={{ flex: 1, minWidth: "80px" }}
+            >
+                <Option key="Count" value="Count">Count</Option>
+            </Combobox>
+        );
+    }
+
+    if (selectedVarInfo.entityName) {
+        return (
+            <>
+                <ColumnLookup
+                    entityName={selectedVarInfo.entityName}
+                    value={selectedColumn}
+                    onChange={(col) => setPath(col)}
+                />
+                {isEntityRef && selectedColumn && (
+                    <Dropdown
+                        size="small"
+                        value={nodeData.targetPath?.[1] ?? ""}
+                        selectedOptions={nodeData.targetPath?.[1] ? [nodeData.targetPath[1]] : []}
+                        onOptionSelect={(_ev, d) => setPath(selectedColumn, d.optionValue ?? "")}
+                        placeholder=".Id/.Name"
+                        style={{ minWidth: "90px" }}
+                    >
+                        {entityRefSubProperties.map((p) => (
+                            <Option key={p} value={p}>{`.${p}`}</Option>
+                        ))}
+                    </Dropdown>
+                )}
+            </>
+        );
+    }
+
+    return (
+        <Input
+            size="small"
+            value={nodeData.targetPath?.[0] ?? ""}
+            placeholder="member"
+            onChange={(_ev, d) => setPath(d.value)}
+            style={{ flex: 1 }}
+        />
+    );
+}
+
+/** Derives a display string from a DslValueExpression for showing in an Input */
+function dslValueToString(v: DslValueExpression | undefined): string {
+    if (!v) return "";
+    switch (v.type) {
+        case "string":      return v.value;
+        case "number":      return String(v.value);
+        case "boolean":     return String(v.value);
+        case "guid":        return v.value;
+        case "null":        return "null";
+        case "enum":        return v.member;
+        case "enumNumber":  return String(v.value);
+        case "interpolation": return v.template;
+        case "ref":         return v.ref.member ? `${v.ref.id}.${v.ref.member}` : (v.ref.id ?? "");
+    }
+}
+
+/**
+ * Renders the expected-value editor for an assertion.
+ * - Enum column  → dropdown of enum members (same column as target)
+ * - EntityRef sub-property (e.g. order.Id) → var Combobox + .Id/.Name sub Dropdown
+ * - Else → free Input
+ */
+function ExpectedValueEditor({
+    id,
+    nodeData,
+    selectedVarInfo,
+}: {
+    id: string;
+    nodeData: AssertNodeData;
+    selectedVarInfo: VarInfo | null;
+}) {
+    const { state, dispatch } = useBuilderContext();
+    const { columns } = useEntityColumns(selectedVarInfo?.entityName ?? "");
+
+    // Resolve the column the assertion is targeting
+    const targetColumn = nodeData.targetPath?.[0] ?? "";
+    const columnInfo = useMemo(
+        () => columns.find((c) => c.logicalName === targetColumn),
+        [columns, targetColumn],
+    );
+
+    const isEnum     = (columnInfo?.enumMembers?.length ?? 0) > 0;
+    const isEntityRef = columnInfo?.dataType.replace("?", "").trim() === "EntityReference";
+    const isSubProp  = (nodeData.targetPath?.length ?? 0) >= 2; // e.g. ape_orderid.Id
+
+    const setExpected = (v: DslValueExpression) =>
+        dispatch({ type: "UPDATE_NODE", payload: { id, data: { expectedDsl: v } } });
+
+    // Current value helpers
+    // The backend decompiler encodes enum values as DslRefValue { id: enumType, member: value }
+    // so we accept both "enum" and "ref" when the column is an enum type.
+    const currentEnum = nodeData.expectedDsl?.type === "enum"
+        ? nodeData.expectedDsl.member
+        : (nodeData.expectedDsl?.type === "ref" && isEnum)
+            ? (nodeData.expectedDsl.ref.member ?? "")
+            : "";
+    const currentRefId = nodeData.expectedDsl?.type === "ref" ? (nodeData.expectedDsl.ref.id ?? "") : "";
+    const currentRefMember = nodeData.expectedDsl?.type === "ref" ? (nodeData.expectedDsl.ref.member ?? "") : "";
+
+    // Collect all non-delegate variables as ref candidates
+    const refVarOptions = useMemo(
+        () => state.nodes.flatMap((n) => {
+            const d = n.data as ProducerNodeData | ServiceNodeData;
+            if (d.nodeType === "producer" && !d.anonymous && d.variableName)
+                return [d.variableName];
+            if (d.nodeType === "service" && d.resultVar)
+                return [d.resultVar];
+            return [];
+        }),
+        [state.nodes],
+    );
+
+    // Enum: show the same enum members as the target column
+    if (isEnum && columnInfo) {
+        const enumType = columnInfo.dataType.replace("?", "").trim();
+        return (
+            <Combobox
+                size="small"
+                freeform
+                value={currentEnum}
+                selectedOptions={currentEnum ? [currentEnum] : []}
+                onOptionSelect={(_ev, d) => {
+                    const member = d.optionValue ?? "";
+                    setExpected({ type: "enum", enumType, member });
+                }}
+                onChange={(ev) => {
+                    setExpected({ type: "enum", enumType, member: ev.target.value });
+                }}
+                style={{ flex: 1 }}
+                placeholder="Select value..."
+            >
+                {columnInfo.enumMembers!.map((m) => (
+                    <Option key={m} value={m}>{m}</Option>
+                ))}
+            </Combobox>
+        );
+    }
+
+    // EntityRef sub-property (e.g. .Id / .Name): pick a variable + sub-property
+    if (isEntityRef || isSubProp) {
+        return (
+            <>
+                <Combobox
+                    size="small"
+                    freeform
+                    value={currentRefId}
+                    selectedOptions={currentRefId ? [currentRefId] : []}
+                    onOptionSelect={(_ev, d) => {
+                        const varId = d.optionValue ?? "";
+                        setExpected({ type: "ref", ref: { kind: "bindingVar", id: varId, member: currentRefMember || "Id" } });
+                    }}
+                    onChange={(ev) => {
+                        setExpected({ type: "ref", ref: { kind: "bindingVar", id: ev.target.value, member: currentRefMember || "Id" } });
+                    }}
+                    style={{ flex: 1, minWidth: "80px" }}
+                    placeholder="variable"
+                >
+                    {refVarOptions.map((v) => (
+                        <Option key={v} value={v}>{v}</Option>
+                    ))}
+                </Combobox>
+                <Dropdown
+                    size="small"
+                    value={currentRefMember}
+                    selectedOptions={currentRefMember ? [currentRefMember] : []}
+                    onOptionSelect={(_ev, d) => {
+                        setExpected({ type: "ref", ref: { kind: "bindingVar", id: currentRefId, member: d.optionValue ?? "Id" } });
+                    }}
+                    placeholder=".Id/.Name"
+                    style={{ minWidth: "90px" }}
+                >
+                    {entityRefSubProperties.map((p) => (
+                        <Option key={p} value={p}>{`.${p}`}</Option>
+                    ))}
+                </Dropdown>
+            </>
+        );
+    }
+
+    // Free text input (string, number, boolean, etc.)
+    return (
+        <Input
+            size="small"
+            value={dslValueToString(nodeData.expectedDsl)}
+            placeholder="expected value"
+            onChange={(_ev, d) => {
+                // Parse to best-fit type
+                const raw = d.value;
+                if (raw === "") { dispatch({ type: "UPDATE_NODE", payload: { id, data: { expectedDsl: undefined } } }); return; }
+                if (raw === "true" || raw === "false") { setExpected({ type: "boolean", value: raw === "true" }); return; }
+                if (raw === "null") { setExpected({ type: "null" }); return; }
+                const num = Number(raw);
+                if (!isNaN(num) && raw.trim() !== "") { setExpected({ type: "number", value: num }); return; }
+                setExpected({ type: "string", value: raw });
+            }}
+            style={{ flex: 1 }}
+        />
+    );
 }
 
 export function AssertNode({ id, data, selected }: NodeProps<BuilderNode>) {
@@ -162,55 +403,7 @@ export function AssertNode({ id, data, selected }: NodeProps<BuilderNode>) {
                 {selectedVarInfo && nodeData.assertionKind !== "notNull" && !isThrow && (
                     <div className={styles.field}>
                         <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Member</Text>
-                        {selectedVarInfo.isList ? (
-                            <Combobox
-                                size="small"
-                                freeform
-                                value={nodeData.targetPath?.[0] ?? ""}
-                                selectedOptions={nodeData.targetPath?.[0] ? [nodeData.targetPath[0]] : []}
-                                onOptionSelect={(_ev, d) => {
-                                    const member = d.optionText ?? d.optionValue ?? "";
-                                    dispatch({
-                                        type: "UPDATE_NODE",
-                                        payload: { id, data: { targetPath: member ? [member] : [] } },
-                                    });
-                                }}
-                                onChange={(ev) => {
-                                    const member = ev.target.value;
-                                    dispatch({
-                                        type: "UPDATE_NODE",
-                                        payload: { id, data: { targetPath: member ? [member] : [] } },
-                                    });
-                                }}
-                                style={{ flex: 1, minWidth: "80px" }}
-                            >
-                                <Option key="Count" value="Count">Count</Option>
-                            </Combobox>
-                        ) : selectedVarInfo.entityName ? (
-                            <ColumnLookup
-                                entityName={selectedVarInfo.entityName}
-                                value={nodeData.targetPath?.[0] ?? ""}
-                                onChange={(col) =>
-                                    dispatch({
-                                        type: "UPDATE_NODE",
-                                        payload: { id, data: { targetPath: col ? [col] : [] } },
-                                    })
-                                }
-                            />
-                        ) : (
-                            <Input
-                                size="small"
-                                value={nodeData.targetPath?.[0] ?? ""}
-                                placeholder="member"
-                                onChange={(_ev, d) =>
-                                    dispatch({
-                                        type: "UPDATE_NODE",
-                                        payload: { id, data: { targetPath: d.value ? [d.value] : [] } },
-                                    })
-                                }
-                                style={{ flex: 1 }}
-                            />
-                        )}
+                        <MemberPicker id={id} nodeData={nodeData} selectedVarInfo={selectedVarInfo} />
                     </div>
                 )}
 
@@ -240,18 +433,7 @@ export function AssertNode({ id, data, selected }: NodeProps<BuilderNode>) {
             {hasExpected && (
                 <div className={styles.footer}>
                     <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Expected</Text>
-                    <Input
-                        size="small"
-                        value={nodeData.expectedValue ?? ""}
-                        placeholder="expected value"
-                        onChange={(_ev, d) =>
-                            dispatch({
-                                type: "UPDATE_NODE",
-                                payload: { id, data: { expectedValue: d.value } },
-                            })
-                        }
-                        style={{ flex: 1 }}
-                    />
+                    <ExpectedValueEditor id={id} nodeData={nodeData} selectedVarInfo={selectedVarInfo} />
                 </div>
             )}
 

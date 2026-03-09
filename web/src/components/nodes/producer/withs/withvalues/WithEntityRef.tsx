@@ -25,7 +25,7 @@ export const WithEntityRef = ({ defaultValue, producerOptions, onValueChange }: 
                 if (data.optionValue) {
                     onValueChange({
                         type: "ref",
-                        ref: { kind: "binding", id: data.optionValue, member: "ToEntityReference", call: "ToEntityReference" },
+                        ref: { kind: "bindingVar", id: data.optionValue, call: "ToEntityReference" },
                     });
                 }
             }}

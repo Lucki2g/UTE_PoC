@@ -18,7 +18,9 @@
       "Bash(dotnet new:*)",
       "Bash(dotnet sln:*)",
       "Bash(dotnet add:*)",
-      "Bash(dotnet test:*)"
+      "Bash(dotnet test:*)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(grep -r \"JsonSerializerOptions\\\\|Converters\\\\|AddSingleton.*Json\" api/Program.cs api/Models/Requests/*.cs)"
     ]
   }
 }

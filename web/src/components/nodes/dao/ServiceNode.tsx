@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import {
     Input,
@@ -13,6 +13,7 @@ import {
     Switch,
     Text,
     makeStyles,
+    mergeClasses,
     tokens,
 } from "@fluentui/react-components";
 import { DeleteRegular, MoreHorizontalRegular } from "@fluentui/react-icons";
@@ -34,6 +35,11 @@ const useStyles = makeStyles({
     selected: {
         borderColor: tokens.colorBrandStroke1 as string as never,
         boxShadow: tokens.shadow8Brand,
+    },
+    withDropTarget: {
+        borderColor: tokens.colorBrandStroke1 as string as never,
+        borderStyle: "dashed" as string as never,
+        backgroundColor: tokens.colorBrandBackground2,
     },
     header: {
         display: "flex",
@@ -81,23 +87,90 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
     const nodeData = data as ServiceNodeData;
     const { state, dispatch } = useBuilderContext();
     const styles = useStyles();
+    const [withDragOver, setWithDragOver] = useState(false);
 
     const isRetrieve = nodeData.operation === "RetrieveList"
         || nodeData.operation === "RetrieveSingle";
     const isUpdate = nodeData.operation === "Update";
 
+    // Compute previous producer nodes (those that appear before this node in the edge chain)
+    const previousProducers = useMemo(() => {
+        const predecessorIds = new Set<string>();
+        const visited = new Set<string>();
+
+        function collectPredecessors(nodeId: string) {
+            if (visited.has(nodeId)) return;
+            visited.add(nodeId);
+            for (const edge of state.edges) {
+                if (edge.target === nodeId) {
+                    predecessorIds.add(edge.source);
+                    collectPredecessors(edge.source);
+                }
+            }
+        }
+
+        collectPredecessors(id);
+
+        return state.nodes
+            .filter((n) => {
+                const d = n.data as ProducerNodeData;
+                return predecessorIds.has(n.id) && d.nodeType === "producer" && !d.anonymous;
+            })
+            .map((n) => n.data as ProducerNodeData);
+    }, [id, state.nodes, state.edges]);
+
     // For Update With blocks: find the producer that matches targetBinding to get entity name
     const targetProducer = useMemo(() => {
         if (!isUpdate || !nodeData.targetBinding) return null;
-        return state.nodes
-            .map((n) => n.data as ProducerNodeData)
-            .find((d) => d.nodeType === "producer" && d.variableName === nodeData.targetBinding) ?? null;
-    }, [isUpdate, nodeData.targetBinding, state.nodes]);
+        return previousProducers.find((d) => d.variableName === nodeData.targetBinding) ?? null;
+    }, [isUpdate, nodeData.targetBinding, previousProducers]);
 
     const withMutations = nodeData.withMutations ?? [];
 
+    const onDragOver = useCallback((e: React.DragEvent) => {
+        if (!isUpdate) return;
+        if (e.dataTransfer.types.includes("application/testengine-type")) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            setWithDragOver(true);
+        }
+    }, [isUpdate]);
+
+    const onDragLeave = useCallback(() => {
+        setWithDragOver(false);
+    }, []);
+
+    const onDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setWithDragOver(false);
+        const type = e.dataTransfer.getData("application/testengine-type");
+        if (type !== "with") return;
+        dispatch({
+            type: "UPDATE_NODE",
+            payload: {
+                id,
+                data: {
+                    withMutations: [
+                        ...withMutations,
+                        { path: "", value: { type: "string", value: "" } },
+                    ],
+                },
+            },
+        });
+    }, [dispatch, id, withMutations]);
+
     return (
-        <div className={`${styles.node} ${selected ? styles.selected : ""}`}>
+        <div
+            className={mergeClasses(
+                styles.node,
+                selected && styles.selected,
+                withDragOver && styles.withDropTarget,
+            )}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+        >
             <div className={styles.header}>
                 <img src={dataverseserviceIcon} alt="" className={styles.icon} />
                 <Text size={200} weight="semibold" style={{ flex: 1 }}>DataverseService</Text>
@@ -147,18 +220,38 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
                     <>
                         <div className={styles.field}>
                             <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Target</Text>
-                            <Input
-                                size="small"
-                                value={nodeData.targetBinding ?? ""}
-                                placeholder="binding id"
-                                onChange={(_ev, data) =>
-                                    dispatch({
-                                        type: "UPDATE_NODE",
-                                        payload: { id, data: { targetBinding: data.value } },
-                                    })
-                                }
-                                style={{ flex: 1 }}
-                            />
+                            {isUpdate ? (
+                                <Dropdown
+                                    size="small"
+                                    value={nodeData.targetBinding ?? ""}
+                                    selectedOptions={nodeData.targetBinding ? [nodeData.targetBinding] : []}
+                                    placeholder="select producer"
+                                    onOptionSelect={(_ev, data) =>
+                                        dispatch({
+                                            type: "UPDATE_NODE",
+                                            payload: { id, data: { targetBinding: data.optionValue ?? "" } },
+                                        })
+                                    }
+                                    style={{ flex: 1 }}
+                                >
+                                    {previousProducers.map((p) => (
+                                        <Option key={p.variableName} value={p.variableName}>{p.variableName}</Option>
+                                    ))}
+                                </Dropdown>
+                            ) : (
+                                <Input
+                                    size="small"
+                                    value={nodeData.targetBinding ?? ""}
+                                    placeholder="binding id"
+                                    onChange={(_ev, data) =>
+                                        dispatch({
+                                            type: "UPDATE_NODE",
+                                            payload: { id, data: { targetBinding: data.value } },
+                                        })
+                                    }
+                                    style={{ flex: 1 }}
+                                />
+                            )}
                         </div>
                         <div className={styles.field}>
                             <Switch
@@ -199,7 +292,7 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
                                 key={i}
                                 dsl={m}
                                 entityName={targetProducer.entityName}
-                                previousProducers={[]}
+                                previousProducers={previousProducers}
                                 onPathChange={(path) => {
                                     const updated = [...withMutations];
                                     updated[i] = { ...m, path };

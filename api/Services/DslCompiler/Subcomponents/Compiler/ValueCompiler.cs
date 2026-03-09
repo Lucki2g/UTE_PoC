@@ -101,11 +101,11 @@ internal sealed class ValueCompiler : DslSubcomponentBase
 
     private string CompileRef(DslRefExpr refExpr) => refExpr.Kind switch
     {
-        "bindingVar" when refExpr.Member != null => $"{refExpr.Id}.{refExpr.Member}",
-        "bindingVar" when refExpr.Call != null   => $"{refExpr.Id}.{refExpr.Call}()",
-        "bindingVar"                             => refExpr.Id ?? "/* unresolved ref */",
-        "actResult"                              => _actResultVar ?? "/* unresolved actResult */",
-        _                                        => "/* unknown ref kind */"
+        ("bindingVar" or "binding") when refExpr.Call != null   => $"{refExpr.Id}.{refExpr.Call}()",
+        ("bindingVar" or "binding") when refExpr.Member != null => $"{refExpr.Id}.{refExpr.Member}",
+        ("bindingVar" or "binding")                             => refExpr.Id ?? "/* unresolved ref */",
+        "actResult"                                             => _actResultVar ?? "/* unresolved actResult */",
+        _                                                       => "/* unknown ref kind */"
     };
 
     private string CompileMemberTarget(DslAssertionTarget target, HashSet<string> notNullVars)

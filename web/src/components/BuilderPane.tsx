@@ -565,7 +565,7 @@ function BuilderPaneInner() {
         const name = newTestName.trim();
         if (!name) return;
 
-        if (branchOption === "new" && newBranchName.trim()) {
+        if ((branchOption === "new" || isOnMainBranch) && newBranchName.trim()) {
             await git.createBranch({
                 branchName: newBranchName.trim(),
                 userFolder,

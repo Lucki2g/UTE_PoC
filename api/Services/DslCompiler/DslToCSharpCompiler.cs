@@ -57,6 +57,8 @@ internal class DslToCSharpCompiler
         var ns        = _options.Namespace ?? "IntegrationTests";
         var className = _options.ClassName ?? ValueCompiler.DeriveClassName(test.Name);
 
+        sb.AppendLine("using SharedTest;");
+        sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
 

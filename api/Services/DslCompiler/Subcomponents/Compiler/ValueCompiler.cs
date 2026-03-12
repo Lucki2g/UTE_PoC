@@ -64,7 +64,9 @@ internal sealed class ValueCompiler : DslSubcomponentBase
     public static string CompileEntityRef(DslEntityRef? entity)
     {
         if (entity == null) return "/* missing entity */";
-        return $"{entity.FromBinding}.{entity.Member}";
+        return string.IsNullOrEmpty(entity.Member)
+            ? entity.FromBinding
+            : $"{entity.FromBinding}.{entity.Member}";
     }
 
     public static string ToCSharpProducerCall(string dslCall)

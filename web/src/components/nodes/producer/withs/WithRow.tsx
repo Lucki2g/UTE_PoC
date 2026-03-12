@@ -72,9 +72,9 @@ export function WithRow({
     const styles = useStyles();
     const { columns } = useEntityColumns(entityName);
 
-    // Resolve column info from the loaded schema using dsl.path
+    // Resolve column info from the loaded schema using dsl.path (stored as propertyName)
     const columnInfo = useMemo(
-        () => columns.find((c) => c.logicalName === dsl.path),
+        () => columns.find((c) => c.propertyName === dsl.path),
         [columns, dsl.path],
     );
 

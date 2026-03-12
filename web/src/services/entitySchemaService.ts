@@ -2,6 +2,8 @@ import { api } from "./apiClient.ts";
 
 export interface EntityColumnInfo {
     logicalName: string;
+    /** C# property name as declared in XrmContext — use this for code emission. */
+    propertyName: string;
     displayName: string | null;
     dataType: string;
     enumMembers: string[] | null;

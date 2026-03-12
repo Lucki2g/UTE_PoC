@@ -132,10 +132,11 @@ public class EntitySchemaService : IEntitySchemaService
 
                 columns.Add(new EntityColumnInfo
                 {
-                    LogicalName = logicalName,
-                    DisplayName = displayNameAttr is not null ? GetAttributeStringArg(displayNameAttr) : null,
-                    DataType = dataType,
-                    EnumMembers = _enumCache.TryGetValue(enumTypeName, out var members) ? members : null,
+                    LogicalName  = logicalName,
+                    PropertyName = prop.Identifier.Text,
+                    DisplayName  = displayNameAttr is not null ? GetAttributeStringArg(displayNameAttr) : null,
+                    DataType     = dataType,
+                    EnumMembers  = _enumCache.TryGetValue(enumTypeName, out var members) ? members : null,
                     TargetEntity = targetEntity,
                 });
             }

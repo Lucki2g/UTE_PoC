@@ -29,8 +29,10 @@ const useStyles = makeStyles({
 
 interface ColumnLookupProps {
     entityName: string;
+    /** Current value — holds the C# property name (e.g. "Ape_Name"). */
     value: string;
-    onChange: (logicalName: string) => void;
+    /** Called with the C# property name of the selected column. */
+    onChange: (propertyName: string) => void;
     /** When set, only columns whose dataType or targetEntity matches this value are shown. */
     filterDataType?: string;
 }
@@ -55,9 +57,10 @@ export function ColumnLookup({ entityName, value, onChange, filterDataType }: Co
         return base.filter(
             (c) =>
                 c.logicalName.includes(q) ||
+                c.propertyName.toLowerCase().includes(q) ||
                 c.displayName?.toLowerCase().includes(q),
         );
-    }, [columns, query, filterDataType, entityName]);
+    }, [columns, query, filterDataType]);
 
     if (loading) {
         return <Spinner size="tiny" />;
@@ -86,9 +89,12 @@ export function ColumnLookup({ entityName, value, onChange, filterDataType }: Co
             style={{ flex: 1 }}
         >
             {filtered.map((col) => (
-                <Option key={col.logicalName} value={col.logicalName} text={col.logicalName}>
+                <Option key={col.propertyName} value={col.propertyName} text={col.propertyName}>
                     <div className={styles.option}>
                         <Text size={200}>{col.logicalName}</Text>
+                        {col.propertyName !== col.logicalName && (
+                            <Text className={styles.secondary}>{col.propertyName}</Text>
+                        )}
                         {col.displayName && (
                             <Text className={styles.secondary}>{col.displayName}</Text>
                         )}

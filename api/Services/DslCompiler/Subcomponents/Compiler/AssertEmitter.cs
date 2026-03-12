@@ -64,15 +64,19 @@ internal sealed class AssertEmitter : DslSubcomponentBase
         var awaitPrefix = test.Async ? "await " : "";
         var asyncSuffix = test.Async ? "Async" : "";
 
+        var setName = retrieval.EntitySet.EndsWith("Set", StringComparison.Ordinal)
+            ? retrieval.EntitySet
+            : retrieval.EntitySet + "Set";
+
         if (retrieval.Where != null)
         {
             var whereExpr = _values.CompileWhereExpression(retrieval.Where, retrieval.Alias);
             sb.AppendLine($"{indent}var {retrieval.Var} = {awaitPrefix}AdminDao.{method}{asyncSuffix}(");
-            sb.AppendLine($"{indent}    xrm => xrm.{retrieval.EntitySet}.Where({retrieval.Alias} => {whereExpr}));");
+            sb.AppendLine($"{indent}    xrm => xrm.{setName}.Where({retrieval.Alias} => {whereExpr}));");
         }
         else
         {
-            sb.AppendLine($"{indent}var {retrieval.Var} = {awaitPrefix}AdminDao.{method}{asyncSuffix}(xrm => xrm.{retrieval.EntitySet});");
+            sb.AppendLine($"{indent}var {retrieval.Var} = {awaitPrefix}AdminDao.{method}{asyncSuffix}(xrm => xrm.{setName});");
         }
     }
 }

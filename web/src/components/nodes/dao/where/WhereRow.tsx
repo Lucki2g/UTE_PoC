@@ -77,7 +77,7 @@ export function WhereRow({ entry, entityName, previousProducers, onChange, onDel
     const { columns } = useEntityColumns(entityName);
 
     const columnInfo = useMemo(
-        () => columns.find((c) => c.logicalName === entry.column),
+        () => columns.find((c) => c.propertyName === entry.column),
         [columns, entry.column],
     );
 

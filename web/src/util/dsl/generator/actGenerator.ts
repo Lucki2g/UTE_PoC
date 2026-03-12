@@ -19,7 +19,7 @@ export function generateAct(actServiceNode: BuilderNode | null): DslOperation {
         awaited:          false,
         unawaitedVariant: false,
         ...(d.targetBinding
-            ? { entity: { fromBinding: d.targetBinding, member: "Entity" } }
+            ? { entity: { fromBinding: d.targetBinding, member: "" } }
             : {}),
         ...(mutations?.length ? { mutations } : {}),
     };

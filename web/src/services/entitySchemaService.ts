@@ -10,8 +10,20 @@ export interface EntityColumnInfo {
 }
 
 const columnCache = new Map<string, EntityColumnInfo[]>();
+let entityNamesCache: string[] | null = null;
 
 export const entitySchemaService = {
+    async getEntityNames(): Promise<string[]> {
+        if (entityNamesCache) return entityNamesCache;
+        const names = await api.get<string[]>("/schema/entities");
+        entityNamesCache = names;
+        return names;
+    },
+
+    getCachedEntityNames(): string[] | null {
+        return entityNamesCache;
+    },
+
     async getColumns(entityName: string): Promise<EntityColumnInfo[]> {
         const key = entityName.toLowerCase();
         const cached = columnCache.get(key);
@@ -28,5 +40,6 @@ export const entitySchemaService = {
 
     clearCache() {
         columnCache.clear();
+        entityNamesCache = null;
     },
 };

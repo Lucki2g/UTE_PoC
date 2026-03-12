@@ -1,6 +1,5 @@
 import type { BuilderNode, ServiceNodeData, AssertNodeData } from "../../../models/builder.ts";
 import type { DslRetrieval, DslAssertion, DslAssertionTarget } from "../../../models/dsl.ts";
-import { parseStringValue } from "../shared/operationKinds.ts";
 
 // ─── Retrievals ───────────────────────────────────────────────────────────────
 
@@ -9,6 +8,7 @@ export function generateRetrievals(retrieveServiceNodes: BuilderNode[]): DslRetr
     return retrieveServiceNodes.map((node) => {
         const d    = node.data as ServiceNodeData;
         const kind = d.operation === "RetrieveList" ? "retrieveList" : "retrieveFirstOrDefault";
+        const logicOp = d.whereLogicOp ?? "and";
         return {
             var:       d.resultVar ?? "result",
             kind,
@@ -16,17 +16,17 @@ export function generateRetrievals(retrieveServiceNodes: BuilderNode[]): DslRetr
             alias:     "x",
             where: d.whereExpressions.length > 0
                 ? {
-                    op: d.whereExpressions.length > 1 ? "and" : d.whereExpressions[0].operator,
+                    op: d.whereExpressions.length > 1 ? logicOp : d.whereExpressions[0].operator,
                     ...(d.whereExpressions.length === 1
                         ? {
                             left:  { kind: "member", root: "x", path: [d.whereExpressions[0].column] },
-                            right: parseStringValue(d.whereExpressions[0].value),
+                            right: d.whereExpressions[0].value,
                         }
                         : {
                             items: d.whereExpressions.map((w) => ({
                                 op:    w.operator,
                                 left:  { kind: "member", root: "x", path: [w.column] },
-                                right: parseStringValue(w.value),
+                                right: w.value,
                             })),
                         }),
                 }

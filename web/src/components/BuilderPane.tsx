@@ -153,7 +153,7 @@ function createNodeFromDrop(
             const data: ServiceNodeData = {
                 nodeType: "service",
                 operation: "RetrieveList",
-                whereExpressions: [{ column: "", operator: "equals", value: "" }],
+                whereExpressions: [{ column: "", operator: "==", value: { type: "string", value: "" } }],
             };
             return { id: nextId(), type: "service", position: { x, y }, data };
         }

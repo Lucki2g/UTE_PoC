@@ -29,12 +29,12 @@ export function loadAssert(assert: DslAssert, startY: number): AssertLoaderResul
                 ? r.where.items.map((item) => ({
                     column:   item.left?.path?.[0] ?? "",
                     operator: item.op,
-                    value:    item.right && "value" in item.right ? String(item.right.value) : "",
+                    value:    item.right ?? { type: "string" as const, value: "" },
                 }))
                 : [{
                     column:   r.where.left?.path?.[0] ?? "",
                     operator: r.where.op,
-                    value:    r.where.right && "value" in r.where.right ? String(r.where.right.value) : "",
+                    value:    r.where.right ?? { type: "string" as const, value: "" },
                 }]
             : [];
 

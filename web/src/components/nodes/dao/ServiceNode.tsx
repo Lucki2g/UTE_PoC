@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import {
+    Combobox,
     Input,
     Dropdown,
     Menu,
@@ -12,15 +13,18 @@ import {
     Option,
     Switch,
     Text,
+    ToggleButton,
     makeStyles,
     mergeClasses,
     tokens,
 } from "@fluentui/react-components";
 import { DeleteRegular, MoreHorizontalRegular } from "@fluentui/react-icons";
-import type { BuilderNode, ServiceNodeData, ProducerNodeData } from "../../../models/builder.ts";
+import type { BuilderNode, ServiceNodeData, ProducerNodeData, WhereEntry } from "../../../models/builder.ts";
 import { useBuilderContext } from "../../../contexts/BuilderContext.tsx";
 import dataverseserviceIcon from "../../../assets/dataverseservice-icon.svg";
 import { WithRow } from "../producer/withs/WithRow.tsx";
+import { WhereRow } from "./where/WhereRow.tsx";
+import { useEntityNames } from "../../../hooks/useEntityNames.ts";
 
 const operations = ["Create", "Update", "RetrieveSingle", "RetrieveList", "Delete"] as const;
 
@@ -81,6 +85,17 @@ const useStyles = makeStyles({
         fontSize: tokens.fontSizeBase100,
         padding: `${tokens.spacingVerticalXXS} 0`,
     },
+    whereDropTarget: {
+        borderColor: tokens.colorPaletteBlueBorderActive as string as never,
+        borderStyle: "dashed" as string as never,
+        backgroundColor: tokens.colorPaletteBlueBackground2,
+    },
+    whereLogicRow: {
+        display: "flex",
+        alignItems: "center",
+        gap: tokens.spacingHorizontalXS,
+        paddingBottom: tokens.spacingVerticalXXS,
+    },
 });
 
 export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
@@ -88,6 +103,8 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
     const { state, dispatch } = useBuilderContext();
     const styles = useStyles();
     const [withDragOver, setWithDragOver] = useState(false);
+    const [whereDragOver, setWhereDragOver] = useState(false);
+    const { names: entityNames } = useEntityNames();
 
     const isRetrieve = nodeData.operation === "RetrieveList"
         || nodeData.operation === "RetrieveSingle";
@@ -126,6 +143,8 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
     }, [isUpdate, nodeData.targetBinding, previousProducers]);
 
     const withMutations = nodeData.withMutations ?? [];
+    const whereExpressions = nodeData.whereExpressions ?? [];
+    const whereLogicOp = nodeData.whereLogicOp ?? "and";
 
     const onDragOver = useCallback((e: React.DragEvent) => {
         if (!isUpdate) return;
@@ -159,6 +178,43 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
             },
         });
     }, [dispatch, id, withMutations]);
+
+    const onWhereDragOver = useCallback((e: React.DragEvent) => {
+        if (!isRetrieve) return;
+        if (e.dataTransfer.types.includes("application/testengine-type")) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            setWhereDragOver(true);
+        }
+    }, [isRetrieve]);
+
+    const onWhereDragLeave = useCallback(() => {
+        setWhereDragOver(false);
+    }, []);
+
+    const onWhereDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setWhereDragOver(false);
+        const type = e.dataTransfer.getData("application/testengine-type");
+        if (type !== "where") return;
+        const newEntry: WhereEntry = { column: "", operator: "==", value: { type: "string", value: "" } };
+        dispatch({
+            type: "UPDATE_NODE",
+            payload: { id, data: { whereExpressions: [...whereExpressions, newEntry] } },
+        });
+    }, [dispatch, id, whereExpressions]);
+
+    const updateWhereEntry = useCallback((index: number, updated: WhereEntry) => {
+        const next = [...whereExpressions];
+        next[index] = updated;
+        dispatch({ type: "UPDATE_NODE", payload: { id, data: { whereExpressions: next } } });
+    }, [dispatch, id, whereExpressions]);
+
+    const removeWhereEntry = useCallback((index: number) => {
+        const next = whereExpressions.filter((_, i) => i !== index);
+        dispatch({ type: "UPDATE_NODE", payload: { id, data: { whereExpressions: next } } });
+    }, [dispatch, id, whereExpressions]);
 
     return (
         <div
@@ -333,32 +389,77 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
                         </div>
                         <div className={styles.field}>
                             <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Entity Set</Text>
-                            <Input
+                            <Combobox
                                 size="small"
+                                freeform
                                 value={nodeData.entitySet ?? ""}
+                                selectedOptions={nodeData.entitySet ? [nodeData.entitySet] : []}
                                 placeholder="e.g. ape_skillSet"
-                                onChange={(_ev, data) =>
+                                onOptionSelect={(_ev, data) =>
                                     dispatch({
                                         type: "UPDATE_NODE",
-                                        payload: { id, data: { entitySet: data.value } },
+                                        payload: { id, data: { entitySet: data.optionValue ?? "" } },
+                                    })
+                                }
+                                onChange={(ev) =>
+                                    dispatch({
+                                        type: "UPDATE_NODE",
+                                        payload: { id, data: { entitySet: ev.target.value } },
                                     })
                                 }
                                 style={{ flex: 1 }}
-                            />
+                                listbox={{ style: { maxHeight: "200px" } }}
+                                positioning="below"
+                            >
+                                {entityNames.map((name) => (
+                                    <Option key={name} value={name}>{name}</Option>
+                                ))}
+                            </Combobox>
                         </div>
                     </>
                 )}
 
-                {isRetrieve && nodeData.whereExpressions.length > 0 && (
-                    <div className={styles.section}>
-                        <Text size={100} style={{ color: tokens.colorNeutralForeground3 }}>Where</Text>
-                        {nodeData.whereExpressions.map((w, i) => (
-                            <div key={i} className={styles.withRow}>
-                                <Text size={100} style={{ color: tokens.colorBrandForeground1 }}>{w.column}</Text>
-                                <Text size={100} style={{ color: tokens.colorNeutralForeground4 }}>{w.operator}</Text>
-                                <Text size={100}>{w.value}</Text>
+                {/* WHERE block — Retrieve only, drag +With chip to add rows */}
+                {isRetrieve && (
+                    <div
+                        className={mergeClasses(styles.section, whereDragOver && styles.whereDropTarget)}
+                        onDragOver={onWhereDragOver}
+                        onDragLeave={onWhereDragLeave}
+                        onDrop={onWhereDrop}
+                    >
+                        {whereExpressions.length > 1 && (
+                            <div className={styles.whereLogicRow}>
+                                <Text size={100} style={{ color: tokens.colorNeutralForeground3 }}>Logic</Text>
+                                <ToggleButton
+                                    size="small"
+                                    appearance="subtle"
+                                    checked={whereLogicOp === "and"}
+                                    onClick={() =>
+                                        dispatch({
+                                            type: "UPDATE_NODE",
+                                            payload: { id, data: { whereLogicOp: whereLogicOp === "and" ? "or" : "and" } },
+                                        })
+                                    }
+                                >
+                                    {whereLogicOp === "and" ? "AND" : "OR"}
+                                </ToggleButton>
                             </div>
+                        )}
+                        {whereExpressions.map((w, i) => (
+                            <WhereRow
+                                key={i}
+                                entry={w}
+                                entityName={nodeData.entitySet ?? ""}
+                                previousProducers={previousProducers}
+                                onChange={(updated) => updateWhereEntry(i, updated)}
+                                onDelete={() => removeWhereEntry(i)}
+                            />
                         ))}
+                        {whereExpressions.length === 0 && (
+                            <Text size={100} style={{ color: tokens.colorNeutralForeground4, padding: `${tokens.spacingVerticalXXS} ${tokens.spacingHorizontalS}` }}>
+                                Drag +Where here to add a filter condition
+                            </Text>
+                        )}
                     </div>
                 )}
             </div>

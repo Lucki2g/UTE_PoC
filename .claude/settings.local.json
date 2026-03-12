@@ -20,7 +20,9 @@
       "Bash(dotnet add:*)",
       "Bash(dotnet test:*)",
       "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
-      "Bash(grep -r \"JsonSerializerOptions\\\\|Converters\\\\|AddSingleton.*Json\" api/Program.cs api/Models/Requests/*.cs)"
+      "Bash(grep -r \"JsonSerializerOptions\\\\|Converters\\\\|AddSingleton.*Json\" api/Program.cs api/Models/Requests/*.cs)",
+      "Bash(grep -l \"FilterRegular\\\\|FilterAddRegular\" \"d:/repos/CoreQuality/web/node_modules/@fluentui/react-icons/lib/icons/\"*.d.ts)",
+      "Bash(grep -l \"LinkRegular\\\\|TextCaseTitleRegular\" \"d:/repos/CoreQuality/web/node_modules/@fluentui/react-icons/lib/icons/\"*.d.ts)"
     ]
   }
 }

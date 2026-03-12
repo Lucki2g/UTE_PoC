@@ -26,6 +26,7 @@ import {
 } from "@fluentui/react-components";
 import {
     AddRegular,
+    FilterRegular,
     MoreHorizontalRegular,
     FolderRegular,
     FolderAddRegular,
@@ -37,7 +38,6 @@ import { useAppMode } from "../contexts/AppModeContext.tsx";
 import { useGit } from "../hooks/useGit.ts";
 import { getDataverseUserFolder } from "../util/dataverseUser.ts";
 import dataproducerIcon from "../assets/dataproducer-icon.svg";
-import dataverseserviceIcon from "../assets/dataverseservice-icon.svg";
 import assertIcon from "../assets/assert-icon.svg";
 
 type TabValue = "producers" | "misc";
@@ -366,8 +366,8 @@ function MiscTab() {
                 draggable
                 onDragStart={(e) => onDragStart(e, "where", "")}
             >
-                <img className={styles.itemIcon} src={dataverseserviceIcon} alt="" />
-                <Text size={200}>DataverseService</Text>
+                <FilterRegular fontSize={20} />
+                <Text size={200}>+Where</Text>
             </div>
 
             {assertBlocks.map((a) => (

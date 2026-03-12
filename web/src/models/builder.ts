@@ -22,6 +22,8 @@ export interface ServiceNodeData {
     resultVar?: string;
     entitySet?: string;
     whereExpressions: WhereEntry[];
+    /** Logical operator combining multiple where entries: "and" | "or" */
+    whereLogicOp?: "and" | "or";
     /** When true, the operation is wrapped in a delegate for throws assertions */
     isDelegateAct?: boolean;
     /** Variable name for the delegate (e.g. "action") */
@@ -48,7 +50,7 @@ export interface AssertNodeData {
 export interface WhereEntry {
     column: string;
     operator: string;
-    value: string;
+    value: DslValueExpression;
 }
 
 export type BuilderNodeData = ProducerNodeData | ServiceNodeData | AssertNodeData;

@@ -3,6 +3,7 @@ namespace TestEngine.Services;
 public interface IEntitySchemaService
 {
     Task<List<EntityColumnInfo>> GetColumnsAsync(string entityLogicalName);
+    Task<List<string>> GetEntityNamesAsync();
 }
 
 public class EntityColumnInfo

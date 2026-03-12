@@ -27,6 +27,12 @@ public class EntitySchemaService : IEntitySchemaService
         return Task.FromResult<List<EntityColumnInfo>>([]);
     }
 
+    public Task<List<string>> GetEntityNamesAsync()
+    {
+        EnsureParsed();
+        return Task.FromResult(_cache.Keys.OrderBy(k => k).ToList());
+    }
+
     private void EnsureParsed()
     {
         if (_parsed) return;

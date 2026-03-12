@@ -26,10 +26,17 @@ internal sealed class ValueCompiler : DslSubcomponentBase
 
     public string CompileWhereExpression(DslWhereExpression where, string alias) => where.Op switch
     {
-        "eq" => $"{CompileMemberExpr(where.Left, alias)} == {CompileValue(where.Right ?? new DslNullValue())}",
+        "==" or "eq"  => $"{CompileMemberExpr(where.Left, alias)} == {CompileValue(where.Right ?? new DslNullValue())}",
+        "!=" or "neq" => $"{CompileMemberExpr(where.Left, alias)} != {CompileValue(where.Right ?? new DslNullValue())}",
+        "<"  or "lt"  => $"{CompileMemberExpr(where.Left, alias)} < {CompileValue(where.Right ?? new DslNullValue())}",
+        "<=" or "lte" => $"{CompileMemberExpr(where.Left, alias)} <= {CompileValue(where.Right ?? new DslNullValue())}",
+        ">"  or "gt"  => $"{CompileMemberExpr(where.Left, alias)} > {CompileValue(where.Right ?? new DslNullValue())}",
+        ">=" or "gte" => $"{CompileMemberExpr(where.Left, alias)} >= {CompileValue(where.Right ?? new DslNullValue())}",
         "and" when where.Items != null
-             => string.Join(" && ", where.Items.Select(i => CompileWhereExpression(i, alias))),
-        _    => $"/* unsupported where op: {where.Op} */"
+              => string.Join(" && ", where.Items.Select(i => CompileWhereExpression(i, alias))),
+        "or" when where.Items != null
+              => string.Join(" || ", where.Items.Select(i => CompileWhereExpression(i, alias))),
+        _     => $"/* unsupported where op: {where.Op} */"
     };
 
     public string CompileMemberExpr(DslMemberExpr? member, string alias)

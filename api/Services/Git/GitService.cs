@@ -26,6 +26,61 @@ public class GitService : IGitService
         _githubRepository = configuration["GitHub:Repository"];
     }
 
+    private (string owner, string repo)? TryParseOwnerRepoFromRemote()
+    {
+        var gitConfigPath = Path.Combine(_repositoryPath, ".git", "config");
+        if (!File.Exists(gitConfigPath))
+            return null;
+
+        // Read the remote URL from .git/config
+        var lines = File.ReadAllLines(gitConfigPath);
+        string? remoteUrl = null;
+        bool inTargetRemote = false;
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith($"[remote \"{_remoteName}\"]"))
+            {
+                inTargetRemote = true;
+                continue;
+            }
+            if (inTargetRemote && trimmed.StartsWith("["))
+            {
+                break; // moved to next section
+            }
+            if (inTargetRemote && trimmed.StartsWith("url ="))
+            {
+                remoteUrl = trimmed["url =".Length..].Trim();
+                break;
+            }
+        }
+
+        if (remoteUrl == null)
+            return null;
+
+        // Parse https://github.com/{owner}/{repo}.git or git@github.com:{owner}/{repo}.git
+        if (remoteUrl.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase))
+        {
+            var path = remoteUrl["https://github.com/".Length..].TrimEnd('/');
+            if (path.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+                path = path[..^4];
+            var parts = path.Split('/');
+            if (parts.Length == 2)
+                return (parts[0], parts[1]);
+        }
+        else if (remoteUrl.StartsWith("git@github.com:", StringComparison.OrdinalIgnoreCase))
+        {
+            var path = remoteUrl["git@github.com:".Length..].TrimEnd('/');
+            if (path.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+                path = path[..^4];
+            var parts = path.Split('/');
+            if (parts.Length == 2)
+                return (parts[0], parts[1]);
+        }
+
+        return null;
+    }
+
     public async Task<CloneResult> CloneRepositoryAsync(string repositoryUrl)
     {
         ValidateRepositoryUrl(repositoryUrl);
@@ -196,12 +251,16 @@ public class GitService : IGitService
         EnsureRepositoryExists();
         ValidateBranchName(targetBranch);
 
-        if (string.IsNullOrWhiteSpace(_githubToken) ||
-            string.IsNullOrWhiteSpace(_githubOwner) ||
-            string.IsNullOrWhiteSpace(_githubRepository))
+        if (string.IsNullOrWhiteSpace(_githubToken))
         {
-            throw new InvalidOperationException("Pull request creation requires GitHub configuration (GitHub:Token, GitHub:Owner, GitHub:Repository).");
+            throw new InvalidOperationException("Pull request creation requires GitHub configuration (GitHub:Token).");
         }
+
+        var remoteInfo = TryParseOwnerRepoFromRemote();
+        var owner = _githubOwner ?? remoteInfo?.owner
+            ?? throw new InvalidOperationException("Could not determine GitHub owner from remote URL. Set GitHub:Owner in configuration.");
+        var repository = _githubRepository ?? remoteInfo?.repo
+            ?? throw new InvalidOperationException("Could not determine GitHub repository from remote URL. Set GitHub:Repository in configuration.");
 
         var currentBranch = await GetCurrentBranchAsync();
 
@@ -225,7 +284,7 @@ public class GitService : IGitService
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         var response = await client.PostAsync(
-            $"https://api.github.com/repos/{_githubOwner}/{_githubRepository}/pulls",
+            $"https://api.github.com/repos/{owner}/{repository}/pulls",
             content);
 
         var responseBody = await response.Content.ReadAsStringAsync();

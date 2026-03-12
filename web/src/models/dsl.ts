@@ -148,6 +148,7 @@ export interface DslActMutation {
     targetVar: string;
     path: string;
     value: DslValueExpression;
+    entitySet?: string;
 }
 
 export interface DslEntityRef {

@@ -6,10 +6,17 @@ namespace TestEngine.Services;
 
 public class DslCompilerService : IDslCompilerService
 {
+    private readonly IEntitySchemaService _schema;
+
+    public DslCompilerService(IEntitySchemaService schema)
+    {
+        _schema = schema;
+    }
+
     public Task<DslCompileResult> CompileToCSharpAsync(DslTestDefinition dsl, DslCompileOptions? options = null)
     {
         options ??= new DslCompileOptions();
-        var compiler = new DslToCSharpCompiler(options);
+        var compiler = new DslToCSharpCompiler(options, _schema);
         var result = compiler.Compile(dsl);
         return Task.FromResult(result);
     }

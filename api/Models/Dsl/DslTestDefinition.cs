@@ -184,6 +184,10 @@ public class DslActMutation
     /// <summary>Value assigned to the property.</summary>
     [JsonPropertyName("value")]
     public required DslValueExpression Value { get; set; }
+
+    /// <summary>Entity set (or logical entity name) used to resolve property names (e.g. "ape_order").</summary>
+    [JsonPropertyName("entitySet")]
+    public string? EntitySet { get; set; }
 }
 
 public class DslEntityRef
@@ -192,7 +196,7 @@ public class DslEntityRef
     public required string FromBinding { get; set; }
 
     [JsonPropertyName("member")]
-    public string Member { get; set; } = "Entity";
+    public string Member { get; set; } = "";
 }
 
 public class DslRelated

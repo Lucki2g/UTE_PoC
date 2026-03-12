@@ -9,6 +9,8 @@ public class EntitySchemaService : IEntitySchemaService
     private readonly TestProjectPaths _paths;
     private readonly ConcurrentDictionary<string, List<EntityColumnInfo>> _cache = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, List<string>> _enumCache = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Maps C# class name → entity logical name (populated during parse).</summary>
+    private Dictionary<string, string> _classNameToLogicalName = new(StringComparer.OrdinalIgnoreCase);
     private bool _parsed;
     private readonly object _parseLock = new();
 
@@ -31,6 +33,26 @@ public class EntitySchemaService : IEntitySchemaService
     {
         EnsureParsed();
         return Task.FromResult(_cache.Keys.OrderBy(k => k).ToList());
+    }
+
+    public Task<string?> ResolveEntityLogicalNameAsync(string entityIdentifier)
+    {
+        EnsureParsed();
+
+        // Strip "Set" suffix if present (e.g. "ape_orderSet" → "ape_order")
+        var stripped = entityIdentifier.EndsWith("Set", StringComparison.OrdinalIgnoreCase)
+            ? entityIdentifier[..^3]
+            : entityIdentifier;
+
+        // Direct logical name match (cache is OrdinalIgnoreCase)
+        if (_cache.ContainsKey(stripped))
+            return Task.FromResult<string?>(stripped);
+
+        // C# class name match (e.g. "Orderdelivery" → "ape_orderdelivery")
+        if (_classNameToLogicalName.TryGetValue(stripped, out var logicalName))
+            return Task.FromResult<string?>(logicalName);
+
+        return Task.FromResult<string?>(null);
     }
 
     private void EnsureParsed()
@@ -61,7 +83,7 @@ public class EntitySchemaService : IEntitySchemaService
         }
 
         // First pass: build map of C# class name → entity logical name
-        var classNameToEntityLogicalName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var classNameToEntityLogicalName = _classNameToLogicalName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var classDecl in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
         {
             var entityAttr = classDecl.AttributeLists

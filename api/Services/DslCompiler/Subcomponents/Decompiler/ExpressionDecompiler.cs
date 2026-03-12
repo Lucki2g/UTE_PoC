@@ -75,15 +75,13 @@ internal sealed class ExpressionDecompiler : DslSubcomponentBase
         var left = memberAccess.Expression.ToString();
         var right = memberAccess.Name.Identifier.Text;
 
-        // Strong enum signal: left contains underscore (e.g. Account_CustomerTypeCode.Customer)
-        if (!left.Contains('.') && char.IsUpper(left[0]) && char.IsUpper(right[0]) && left.Contains('_'))
+        // Enum signal: right is PascalCase (member name) and left has no dots (simple identifier, not a chain).
+        // Covers both PascalCase enum types (e.g. Account_CustomerTypeCode.Customer)
+        // and lowercase logical-name-style enum types (e.g. ape_orderstatus.Delivered).
+        if (!left.Contains('.') && char.IsUpper(right[0]))
             return new DslEnumValue { EnumType = left, Member = right };
 
-        // Weaker heuristic: both sides PascalCase, no dots in left
-        if (!left.Contains('.') && char.IsUpper(left[0]) && char.IsUpper(right[0]))
-            return new DslEnumValue { EnumType = left, Member = right };
-
-        // Otherwise it's a binding member reference
+        // Otherwise it's a binding member reference (e.g. order.Name, producer.Id)
         return new DslRefValue { Ref = new DslRefExpr { Kind = "bindingVar", Id = left, Member = right } };
     }
 

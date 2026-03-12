@@ -36,7 +36,7 @@ internal sealed class UpdateOperationParser : IActOperationParser
                 Member      = memberAccess.Name.Identifier.Text
             };
         }
-        return new DslEntityRef { FromBinding = expr.ToString(), Member = "Entity" };
+        return new DslEntityRef { FromBinding = expr.ToString(), Member = "" };
     }
 
     private static string? InferGenericType(SeparatedSyntaxList<ArgumentSyntax> args)

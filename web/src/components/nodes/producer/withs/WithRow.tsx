@@ -94,7 +94,11 @@ export function WithRow({
                 const selectedMember = dsl.value.type === "ref" ? dsl.value.ref.id : "";
                 return <WithEntityRef defaultValue={selectedMember} producerOptions={producerOptions} onValueChange={onValueChange} />;
             case "enum": {
-                const selectedMember = dsl.value.type === "enum" ? dsl.value.member : "";
+                const selectedMember = dsl.value.type === "enum"
+                    ? dsl.value.member
+                    : dsl.value.type === "ref" && dsl.value.ref.member
+                        ? dsl.value.ref.member
+                        : "";
                 return <WithChoice defaultValue={selectedMember} columnInfo={columnInfo!} onValueChange={onValueChange} />;
             }
             default:

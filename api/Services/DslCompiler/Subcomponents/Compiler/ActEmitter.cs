@@ -45,7 +45,10 @@ internal sealed class ActEmitter : DslSubcomponentBase
             foreach (var mutation in op.Mutations)
             {
                 var valueStr = _values.CompileValue(mutation.Value);
-                sb.AppendLine($"{indent}{mutation.TargetVar}.{mutation.Path} = {valueStr};");
+                var resolvedPath = mutation.EntitySet != null
+                    ? _values.ResolveEntityProperty(mutation.EntitySet, mutation.Path)
+                    : mutation.Path;
+                sb.AppendLine($"{indent}{mutation.TargetVar}.{resolvedPath} = {valueStr};");
             }
         }
 

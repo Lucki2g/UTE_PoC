@@ -5,8 +5,13 @@ namespace TestEngine.Services.DslCompiler;
 internal sealed class ValueCompiler : DslSubcomponentBase
 {
     private string? _actResultVar;
+    private readonly IEntitySchemaService? _schema;
 
-    public ValueCompiler(List<DslDiagnostic> diagnostics) : base(diagnostics) { }
+    public ValueCompiler(List<DslDiagnostic> diagnostics, IEntitySchemaService? schema = null)
+        : base(diagnostics)
+    {
+        _schema = schema;
+    }
 
     internal void SetActResultVar(string? resultVar) => _actResultVar = resultVar;
 
@@ -24,33 +29,53 @@ internal sealed class ValueCompiler : DslSubcomponentBase
         _                       => "/* unknown value */"
     };
 
-    public string CompileWhereExpression(DslWhereExpression where, string alias) => where.Op switch
+    public string CompileWhereExpression(DslWhereExpression where, string alias, string? entitySet = null) => where.Op switch
     {
-        "==" or "eq"  => $"{CompileMemberExpr(where.Left, alias)} == {CompileValue(where.Right ?? new DslNullValue())}",
-        "!=" or "neq" => $"{CompileMemberExpr(where.Left, alias)} != {CompileValue(where.Right ?? new DslNullValue())}",
-        "<"  or "lt"  => $"{CompileMemberExpr(where.Left, alias)} < {CompileValue(where.Right ?? new DslNullValue())}",
-        "<=" or "lte" => $"{CompileMemberExpr(where.Left, alias)} <= {CompileValue(where.Right ?? new DslNullValue())}",
-        ">"  or "gt"  => $"{CompileMemberExpr(where.Left, alias)} > {CompileValue(where.Right ?? new DslNullValue())}",
-        ">=" or "gte" => $"{CompileMemberExpr(where.Left, alias)} >= {CompileValue(where.Right ?? new DslNullValue())}",
+        "==" or "eq"  => $"{CompileMemberExpr(where.Left, alias, entitySet)} == {CompileValue(where.Right ?? new DslNullValue())}",
+        "!=" or "neq" => $"{CompileMemberExpr(where.Left, alias, entitySet)} != {CompileValue(where.Right ?? new DslNullValue())}",
+        "<"  or "lt"  => $"{CompileMemberExpr(where.Left, alias, entitySet)} < {CompileValue(where.Right ?? new DslNullValue())}",
+        "<=" or "lte" => $"{CompileMemberExpr(where.Left, alias, entitySet)} <= {CompileValue(where.Right ?? new DslNullValue())}",
+        ">"  or "gt"  => $"{CompileMemberExpr(where.Left, alias, entitySet)} > {CompileValue(where.Right ?? new DslNullValue())}",
+        ">=" or "gte" => $"{CompileMemberExpr(where.Left, alias, entitySet)} >= {CompileValue(where.Right ?? new DslNullValue())}",
         "and" when where.Items != null
-              => string.Join(" && ", where.Items.Select(i => CompileWhereExpression(i, alias))),
+              => string.Join(" && ", where.Items.Select(i => CompileWhereExpression(i, alias, entitySet))),
         "or" when where.Items != null
-              => string.Join(" || ", where.Items.Select(i => CompileWhereExpression(i, alias))),
+              => string.Join(" || ", where.Items.Select(i => CompileWhereExpression(i, alias, entitySet))),
         _     => $"/* unsupported where op: {where.Op} */"
     };
 
-    public string CompileMemberExpr(DslMemberExpr? member, string alias)
+    public string CompileMemberExpr(DslMemberExpr? member, string alias, string? entitySet = null)
     {
         if (member == null) return "/* missing member */";
         var root = member.Root == "alias" ? alias : member.Root;
-        return $"{root}.{string.Join(".", member.Path)}";
+        var resolvedPath = entitySet != null
+            ? member.Path.Select(p => ResolvePropertyName(entitySet, p))
+            : member.Path;
+        return $"{root}.{string.Join(".", resolvedPath)}";
     }
 
-    public string CompileAssertionTarget(DslAssertionTarget target, HashSet<string> notNullVars) =>
+    /// <summary>Resolves a logical property name to its C# property name for the given entity set.</summary>
+    public string ResolveEntityProperty(string entitySet, string identifier) => ResolvePropertyName(entitySet, identifier);
+
+    private string ResolvePropertyName(string entitySet, string identifier)
+    {
+        if (_schema == null) return identifier;
+        var logicalName = _schema.ResolveEntityLogicalNameAsync(entitySet).GetAwaiter().GetResult();
+        if (logicalName == null) return identifier;
+        var columns = _schema.GetColumnsAsync(logicalName).GetAwaiter().GetResult();
+        var match = columns.FirstOrDefault(c =>
+            string.Equals(c.LogicalName, identifier, StringComparison.OrdinalIgnoreCase));
+        return match?.PropertyName ?? identifier;
+    }
+
+    public string CompileAssertionTarget(
+        DslAssertionTarget target,
+        HashSet<string> notNullVars,
+        IReadOnlyDictionary<string, string>? retrievalEntityMap = null) =>
         target.Kind switch
         {
             "var"    => target.Name ?? "/* missing var */",
-            "member" => CompileMemberTarget(target, notNullVars),
+            "member" => CompileMemberTarget(target, notNullVars, retrievalEntityMap),
             _        => "/* unknown target kind */"
         };
 
@@ -117,12 +142,22 @@ internal sealed class ValueCompiler : DslSubcomponentBase
         _                                                       => "/* unknown ref kind */"
     };
 
-    private string CompileMemberTarget(DslAssertionTarget target, HashSet<string> notNullVars)
+    private string CompileMemberTarget(
+        DslAssertionTarget target,
+        HashSet<string> notNullVars,
+        IReadOnlyDictionary<string, string>? retrievalEntityMap = null)
     {
         var rootVar = target.RootVar ?? "/* missing root */";
-        var path = target.Path != null ? string.Join(".", target.Path) : "";
         var accessor = notNullVars.Contains(rootVar) ? "." : "?.";
-        return $"{rootVar}{accessor}{path}";
+
+        if (target.Path == null || target.Path.Count == 0)
+            return $"{rootVar}{accessor}";
+
+        IEnumerable<string> resolvedPath = target.Path;
+        if (retrievalEntityMap != null && retrievalEntityMap.TryGetValue(rootVar, out var entitySet))
+            resolvedPath = target.Path.Select(p => ResolvePropertyName(entitySet, p));
+
+        return $"{rootVar}{accessor}{string.Join(".", resolvedPath)}";
     }
 
     private static string FormatNumber(double value)

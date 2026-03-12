@@ -43,11 +43,18 @@ internal sealed class ArrangeEmitter : DslSubcomponentBase
 
         var lambdaParam = ValueCompiler.DeriveLambdaParam(producerCall);
 
+        // Extract entity identifier from call "DataProducer.EntityName.DraftMethod" for property resolution
+        var callParts = binding.Producer.Call.Split('.');
+        var entityIdentifier = callParts.Length >= 2 ? callParts[1] : null;
+
         foreach (var mutation in binding.Producer.With)
         {
             var value = _values.CompileValue(mutation.Value);
+            var resolvedPath = entityIdentifier != null
+                ? _values.ResolveEntityProperty(entityIdentifier, mutation.Path)
+                : mutation.Path;
             sb.AppendLine();
-            sb.Append($"{indent}    .With({lambdaParam} => {lambdaParam}.{mutation.Path} = {value})");
+            sb.Append($"{indent}    .With({lambdaParam} => {lambdaParam}.{resolvedPath} = {value})");
         }
 
         if (hasInactivate)

@@ -4,6 +4,11 @@ public interface IEntitySchemaService
 {
     Task<List<EntityColumnInfo>> GetColumnsAsync(string entityLogicalName);
     Task<List<string>> GetEntityNamesAsync();
+    /// <summary>
+    /// Resolves an entity identifier (logical name, C# class name, or Set-suffixed name) to the
+    /// logical entity name used as the schema cache key. Returns null if no match is found.
+    /// </summary>
+    Task<string?> ResolveEntityLogicalNameAsync(string entityIdentifier);
 }
 
 public class EntityColumnInfo

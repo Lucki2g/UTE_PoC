@@ -25,6 +25,10 @@ internal sealed class AssertEmitter : DslSubcomponentBase
             .Select(a => a.Target.Name!)
             .ToHashSet();
 
+        // Map retrieval var → entitySet for property name resolution in assertion targets
+        var retrievalEntityMap = assert.Retrievals
+            .ToDictionary(r => r.Var, r => r.EntitySet, StringComparer.Ordinal);
+
         foreach (var retrieval in assert.Retrievals)
             EmitRetrieval(sb, retrieval, test, indent);
 
@@ -33,7 +37,7 @@ internal sealed class AssertEmitter : DslSubcomponentBase
 
         foreach (var assertion in assert.Assertions)
         {
-            var target = _values.CompileAssertionTarget(assertion.Target, notNullVars);
+            var target = _values.CompileAssertionTarget(assertion.Target, notNullVars, retrievalEntityMap);
 
             if (_registry.TryGetValue(assertion.Kind, out var emitter))
             {
@@ -70,7 +74,7 @@ internal sealed class AssertEmitter : DslSubcomponentBase
 
         if (retrieval.Where != null)
         {
-            var whereExpr = _values.CompileWhereExpression(retrieval.Where, retrieval.Alias);
+            var whereExpr = _values.CompileWhereExpression(retrieval.Where, retrieval.Alias, retrieval.EntitySet);
             sb.AppendLine($"{indent}var {retrieval.Var} = {awaitPrefix}AdminDao.{method}{asyncSuffix}(");
             sb.AppendLine($"{indent}    xrm => xrm.{setName}.Where({retrieval.Alias} => {whereExpr}));");
         }

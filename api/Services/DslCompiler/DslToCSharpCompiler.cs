@@ -14,10 +14,10 @@ internal class DslToCSharpCompiler
     private readonly ActEmitter     _act;
     private readonly AssertEmitter  _assert;
 
-    public DslToCSharpCompiler(DslCompileOptions options)
+    public DslToCSharpCompiler(DslCompileOptions options, IEntitySchemaService? schema = null)
     {
         _options = options;
-        _values  = new ValueCompiler(_diagnostics);
+        _values  = new ValueCompiler(_diagnostics, schema);
         _arrange = new ArrangeEmitter(_diagnostics, _values);
         _act     = new ActEmitter(_diagnostics, _values,
         [

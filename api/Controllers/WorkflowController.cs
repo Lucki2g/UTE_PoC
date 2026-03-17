@@ -10,6 +10,11 @@ public static class WorkflowController
             .WithTags("Workflows")
             .WithName("GetWorkflows")
             .WithDescription("Returns the names of available Power Automate workflow files from the repository");
+
+        app.MapGet("/workflows/{name}", GetWorkflow)
+            .WithTags("Workflows")
+            .WithName("GetWorkflow")
+            .WithDescription("Returns the JSON content of a specific workflow file");
     }
 
     private static IResult GetWorkflows(TestProjectPaths paths)
@@ -26,5 +31,18 @@ public static class WorkflowController
             .ToArray();
 
         return Results.Ok(names);
+    }
+
+    private static IResult GetWorkflow(string name, TestProjectPaths paths)
+    {
+        var workflowsDir = Path.Combine(paths.RepositoryPath, "test", "SharedTest", "Workflows");
+        var safeName = Path.GetFileName(name); // prevent path traversal
+        var filePath = Path.Combine(workflowsDir, safeName + ".json");
+
+        if (!File.Exists(filePath))
+            return Results.NotFound();
+
+        var content = File.ReadAllText(filePath);
+        return Results.Text(content, "application/json");
     }
 }

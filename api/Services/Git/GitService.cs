@@ -257,9 +257,9 @@ public class GitService : IGitService
         }
 
         var remoteInfo = TryParseOwnerRepoFromRemote();
-        var owner = _githubOwner ?? remoteInfo?.owner
+        var owner = (string.IsNullOrWhiteSpace(_githubOwner) ? null : _githubOwner) ?? remoteInfo?.owner
             ?? throw new InvalidOperationException("Could not determine GitHub owner from remote URL. Set GitHub:Owner in configuration.");
-        var repository = _githubRepository ?? remoteInfo?.repo
+        var repository = (string.IsNullOrWhiteSpace(_githubRepository) ? null : _githubRepository) ?? remoteInfo?.repo
             ?? throw new InvalidOperationException("Could not determine GitHub repository from remote URL. Set GitHub:Repository in configuration.");
 
         var currentBranch = await GetCurrentBranchAsync();

@@ -193,7 +193,7 @@ public static class GitController
         try
         {
             var prUrl = await gitService.CreatePullRequestAsync(request.TargetBranch, request.Title, request.Description ?? "");
-            return Results.Ok(new { message = "Pull request created", url = prUrl });
+            return Results.Ok(prUrl);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("not initialized"))
         {

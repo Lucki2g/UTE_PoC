@@ -31,7 +31,9 @@
       "Bash(dotnet list:*)",
       "Bash(rm -rf /d/repos/CoreQuality/api/Services/CopilotStudio /d/repos/CoreQuality/api/Controllers/CopilotStudioController.cs)",
       "Bash(rm -f /d/repos/CoreQuality/web/src/services/copilotService.ts /d/repos/CoreQuality/web/src/contexts/CopilotContext.tsx /d/repos/CoreQuality/web/src/util/msalToken.ts /d/repos/CoreQuality/web/src/components/CopilotChat.tsx)",
-      "Bash(dotnet remove:*)"
+      "Bash(dotnet remove:*)",
+      "Bash(grep -r \"workflow\\\\|Workflow\\\\|automation\\\\|flow\" /d/repos/CoreQuality/api/Controllers/ --include=*.cs -l)",
+      "Bash(grep -r \"MapGet\\\\|MapPost\" /d/repos/CoreQuality/api/Controllers/ --include=*.cs)"
     ]
   }
 }

@@ -30,13 +30,16 @@ import { useMetadata } from "../hooks/useMetadata.ts";
 import { useProducers } from "../hooks/useProducers.ts";
 import { useTests } from "../hooks/useTests.ts";
 import { GitBranch, GitLoop, GitPush, GitPullReques, GitClone, GitSettings, GitDeleteRepo } from "../util/icons.tsx";
-import bannerIcon from "../assets/testengine-banner-icon.svg";
+import bannerIcon from "../assets/testengine-banner-icon.png";
+import copilotIcon from "../assets/copilot-icon.svg";
+import claudeIcon from "../assets/claude-ai-icon.svg";
+import { useCopilot } from "../contexts/CopilotContext.tsx";
 
 const useStyles = makeStyles({
     header: {
         height: "48px",
         minHeight: "48px",
-        backgroundColor: tokens.colorBrandBackground,
+        background: "linear-gradient(135deg, #0f62fe 0%, #6929c4 100%)",
         color: tokens.colorNeutralForegroundOnBrand,
         display: "flex",
         alignItems: "center",
@@ -54,6 +57,9 @@ const useStyles = makeStyles({
     brandIcon: {
         height: "28px",
         width: "auto",
+        padding: "2px",
+        borderRadius: tokens.borderRadiusMedium,
+        backgroundColor: "white",
     },
     actions: {
         display: "flex",
@@ -108,6 +114,28 @@ const useStyles = makeStyles({
         backgroundColor: tokens.colorNeutralForegroundOnBrand,
         opacity: 0.3,
         margin: `0 ${tokens.spacingHorizontalXS}`,
+    },
+    copilotBtn: {
+        display: "flex",
+        alignItems: "center",
+        gap: tokens.spacingHorizontalXS,
+        padding: "2px",
+        borderRadius: "999px",
+        background: "linear-gradient(135deg, #00aeff, #2253ce, #8c48ff, #f2598a, #ffb152)",
+        cursor: "pointer",
+        border: "none",
+        "&:hover": {
+            opacity: "0.85" as never,
+        },
+    },
+    copilotBtnInner: {
+        display: "flex",
+        alignItems: "center",
+        gap: tokens.spacingHorizontalXS,
+        padding: `4px ${tokens.spacingHorizontalS}`,
+        borderRadius: "999px",
+        backgroundColor: "#1a0a3e",
+        color: "white",
     },
 });
 
@@ -208,6 +236,7 @@ export function Header() {
     const { dispatch: dispatchProducers } = useProducerContext();
     const { dispatch: dispatchTests } = useTestContext();
     const { dispatch: dispatchBuilder } = useBuilderContext();
+    const copilot = useCopilot();
     const styles = useStyles();
 
     const [syncDialogOpen, setSyncDialogOpen] = useState(false);
@@ -295,6 +324,10 @@ export function Header() {
         <header className={styles.header}>
             <div className={styles.brand}>
                 <img src={bannerIcon} alt="TestEngine" className={styles.brandIcon} />
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                    <Text weight="semibold" size={300}>TestCore Nexus</Text>
+                    <Text size={100}>POC</Text>
+                </div>
             </div>
 
             <div className={styles.actions}>
@@ -395,6 +428,20 @@ export function Header() {
                         </Tooltip>
                     </>
                 )}
+
+                {/* Copilot button */}
+                <div className={styles.divider} />
+                <Tooltip content="Open Copilot Assistant" relationship="label">
+                    <button className={styles.copilotBtn} onClick={copilot.open ? copilot.close : copilot.openChat} aria-label="Copilot">
+                        <div className={styles.copilotBtnInner}>
+                            <div style={{ position: "relative", width: "18px", height: "18px", flexShrink: 0 }}>
+                                <img src={copilotIcon} alt="" style={{ width: "18px", height: "18px" }} />
+                                <img src={claudeIcon} alt="" style={{ position: "absolute", bottom: "-2px", right: "-2px", width: "9px", height: "9px", borderRadius: "50%", border: "1px solid #1a0a3e", backgroundColor: "white" }} />
+                            </div>
+                            <Text size={200} style={{ color: "white" }}>Copilot</Text>
+                        </div>
+                    </button>
+                </Tooltip>
             </div>
 
             {/* Clone repository dialog */}

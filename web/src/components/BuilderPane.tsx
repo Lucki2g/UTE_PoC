@@ -137,6 +137,7 @@ function createNodeFromDrop(
                 build: false,
                 anonymous: false,
                 withMutations: [],
+                inactivate: false,
             };
             return { id: nextId(), type: "producer", position: { x, y }, data };
         }

@@ -91,5 +91,6 @@ app.MapTestEndpoints();
 app.MapDataProducerEndpoints();
 app.MapDataExtensionsEndpoints();
 app.MapEntitySchemaEndpoints();
+app.MapWorkflowEndpoints();
 
 app.Run();

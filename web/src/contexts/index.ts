@@ -5,3 +5,4 @@ export { ExtensionProvider, useExtensionContext } from "./ExtensionContext.tsx";
 export { MetadataProvider, useMetadataContext } from "./MetadataContext.tsx";
 export { BuilderProvider, useBuilderContext } from "./BuilderContext.tsx";
 export { AppModeProvider, useAppMode } from "./AppModeContext.tsx";
+export { CopilotProvider, useCopilot } from "./CopilotContext.tsx";

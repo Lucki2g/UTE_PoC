@@ -698,30 +698,30 @@ function BuilderPaneInner() {
                                 relationship="label"
                                 visible={isOnMainBranch ? undefined : false}
                             >
-                            <Button
-                                appearance="subtle"
-                                size="small"
-                                icon={<SaveRegular />}
-                                onClick={handleSave}
-                                disabled={!state.dirty || isOnMainBranch}
-                            >
-                                Save
-                            </Button>
+                                <Button
+                                    appearance="subtle"
+                                    size="small"
+                                    icon={<SaveRegular />}
+                                    onClick={handleSave}
+                                    disabled={!state.dirty || isOnMainBranch}
+                                >
+                                    Save
+                                </Button>
                             </Tooltip>
                             <Tooltip
                                 content="Cannot save directly to main — switch to a feature branch first"
                                 relationship="label"
                                 visible={isOnMainBranch ? undefined : false}
                             >
-                            <Button
-                                appearance="primary"
-                                size="small"
-                                icon={<BeakerEditRegular />}
-                                onClick={handleSaveAndPublish}
-                                disabled={!state.dirty || isOnMainBranch}
-                            >
-                                Save & Publish
-                            </Button>
+                                <Button
+                                    appearance="primary"
+                                    size="small"
+                                    icon={<BeakerEditRegular />}
+                                    onClick={handleSaveAndPublish}
+                                    disabled={!state.dirty || isOnMainBranch}
+                                >
+                                    Save & Publish
+                                </Button>
                             </Tooltip>
                             <Button
                                 appearance="secondary"

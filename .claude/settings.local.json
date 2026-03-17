@@ -22,7 +22,16 @@
       "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
       "Bash(grep -r \"JsonSerializerOptions\\\\|Converters\\\\|AddSingleton.*Json\" api/Program.cs api/Models/Requests/*.cs)",
       "Bash(grep -l \"FilterRegular\\\\|FilterAddRegular\" \"d:/repos/CoreQuality/web/node_modules/@fluentui/react-icons/lib/icons/\"*.d.ts)",
-      "Bash(grep -l \"LinkRegular\\\\|TextCaseTitleRegular\" \"d:/repos/CoreQuality/web/node_modules/@fluentui/react-icons/lib/icons/\"*.d.ts)"
+      "Bash(grep -l \"LinkRegular\\\\|TextCaseTitleRegular\" \"d:/repos/CoreQuality/web/node_modules/@fluentui/react-icons/lib/icons/\"*.d.ts)",
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(xargs -I{} sh -c \"dotnet-script 2>/dev/null || true\")",
+      "Read(//c/Users/hardk/.nuget/packages/microsoft.agents.copilotstudio.client/**)",
+      "Bash(dotnet list:*)",
+      "Bash(rm -rf /d/repos/CoreQuality/api/Services/CopilotStudio /d/repos/CoreQuality/api/Controllers/CopilotStudioController.cs)",
+      "Bash(rm -f /d/repos/CoreQuality/web/src/services/copilotService.ts /d/repos/CoreQuality/web/src/contexts/CopilotContext.tsx /d/repos/CoreQuality/web/src/util/msalToken.ts /d/repos/CoreQuality/web/src/components/CopilotChat.tsx)",
+      "Bash(dotnet remove:*)"
     ]
   }
 }

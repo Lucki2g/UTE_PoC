@@ -7,6 +7,7 @@ import {
     MetadataProvider,
     BuilderProvider,
     AppModeProvider,
+    CopilotProvider,
 } from "../contexts/index.ts";
 import { useAppMode } from "../contexts/AppModeContext.tsx";
 import { Header } from "./Header.tsx";
@@ -14,6 +15,7 @@ import { TestExplorer } from "./TestExplorer.tsx";
 import { BuilderPane } from "./BuilderPane.tsx";
 import { ProducerBuilderPane } from "./ProducerBuilderPane.tsx";
 import { ComponentExplorer } from "./ComponentExplorer.tsx";
+import { CopilotChat } from "./CopilotChat.tsx";
 
 function AppBody() {
     const { state } = useAppMode();
@@ -39,10 +41,13 @@ export function App() {
                             <ExtensionProvider>
                                 <BuilderProvider>
                                     <AppModeProvider>
-                                        <div className="app-layout">
-                                            <Header />
-                                            <AppBody />
-                                        </div>
+                                        <CopilotProvider>
+                                            <div className="app-layout">
+                                                <Header />
+                                                <AppBody />
+                                            </div>
+                                            <CopilotChat />
+                                        </CopilotProvider>
                                     </AppModeProvider>
                                 </BuilderProvider>
                             </ExtensionProvider>

@@ -3,6 +3,7 @@ import { useMetadataContext } from "../contexts/MetadataContext.tsx";
 import type { SyncProgressEvent } from "../contexts/MetadataContext.tsx";
 import { api } from "../services/apiClient.ts";
 import type { SyncMetadataRequest } from "../models/requests.ts";
+import { entitySchemaService } from "../services/entitySchemaService.ts";
 
 export function useMetadata() {
     const { state, dispatch } = useMetadataContext();
@@ -54,6 +55,7 @@ export function useMetadata() {
                     }
 
                     if (evt.done) {
+                        entitySchemaService.clearCache();
                         dispatch({ type: "SYNC_COMPLETE" });
                         return;
                     }
@@ -72,6 +74,7 @@ export function useMetadata() {
             return;
         }
 
+        entitySchemaService.clearCache();
         dispatch({ type: "SYNC_COMPLETE" });
     }, [dispatch]);
 

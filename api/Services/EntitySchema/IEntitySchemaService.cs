@@ -9,6 +9,8 @@ public interface IEntitySchemaService
     /// logical entity name used as the schema cache key. Returns null if no match is found.
     /// </summary>
     Task<string?> ResolveEntityLogicalNameAsync(string entityIdentifier);
+    /// <summary>Clears the parsed schema cache so it is re-read from disk on next access.</summary>
+    void InvalidateCache();
 }
 
 public class EntityColumnInfo

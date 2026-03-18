@@ -21,6 +21,7 @@ public class MetadataService : IMetadataService
     private readonly string _repositoryPath;
     private readonly DataverseOptions _dataverse;
     private readonly MetadataToolsOptions _tools;
+    private readonly IEntitySchemaService _entitySchema;
     private readonly ILogger<MetadataService> _logger;
 
     private readonly string DefaultEntities = "account,contact,appnotification,annotation,duplicaterule,environmentvariablevalue,environmentvariabledefinition,queue,savedquery,systemuser,task,template";
@@ -29,11 +30,13 @@ public class MetadataService : IMetadataService
         TestProjectPaths paths,
         IOptions<DataverseOptions> dataverse,
         IOptions<MetadataToolsOptions> tools,
+        IEntitySchemaService entitySchema,
         ILogger<MetadataService> logger)
     {
         _repositoryPath = paths.RepositoryPath;
         _dataverse = dataverse.Value;
         _tools = tools.Value;
+        _entitySchema = entitySchema;
         _logger = logger;
     }
 
@@ -47,6 +50,7 @@ public class MetadataService : IMetadataService
 
         var connectionString = _dataverse.BuildConnectionString(environmentUrl);
         await RunXrmContextAsync(connectionString, environmentUrl);
+        _entitySchema.InvalidateCache();
         await RunMetadataGeneratorAsync(connectionString, environmentUrl);
         await RunWorkflowAsync(connectionString, environmentUrl);
     }
@@ -90,6 +94,7 @@ public class MetadataService : IMetadataService
             "C# entity class generation failed");
         yield return phase1Result;
         if (phase1Result.Status == SyncStatus.Error) yield break;
+        _entitySchema.InvalidateCache();
 
         // ── Phase 2: MetadataGenerator ────────────────────────────────────────
         yield return new SyncProgressEvent(SyncPhase.Metadata, SyncStatus.Started,

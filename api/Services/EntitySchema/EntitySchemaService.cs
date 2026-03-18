@@ -11,7 +11,7 @@ public class EntitySchemaService : IEntitySchemaService
     private Dictionary<string, List<string>> _enumCache = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Maps C# class name → entity logical name (populated during parse).</summary>
     private Dictionary<string, string> _classNameToLogicalName = new(StringComparer.OrdinalIgnoreCase);
-    private bool _parsed;
+    private DateTime _parsedAt = DateTime.MinValue;
     private readonly object _parseLock = new();
 
     public EntitySchemaService(TestProjectPaths paths)
@@ -55,14 +55,27 @@ public class EntitySchemaService : IEntitySchemaService
         return Task.FromResult<string?>(null);
     }
 
-    private void EnsureParsed()
+    public void InvalidateCache()
     {
-        if (_parsed) return;
         lock (_parseLock)
         {
-            if (_parsed) return;
+            _parsedAt = DateTime.MinValue;
+        }
+    }
+
+    private void EnsureParsed()
+    {
+        var filePath = Path.Combine(_paths.RepositoryPath, "src", "Shared", "SharedContext", "XrmContext.cs");
+        var lastWrite = File.Exists(filePath) ? File.GetLastWriteTimeUtc(filePath) : DateTime.MinValue;
+
+        if (_parsedAt >= lastWrite && _parsedAt != DateTime.MinValue) return;
+
+        lock (_parseLock)
+        {
+            if (_parsedAt >= lastWrite && _parsedAt != DateTime.MinValue) return;
+            _cache.Clear();
             ParseXrmContext();
-            _parsed = true;
+            _parsedAt = lastWrite != DateTime.MinValue ? lastWrite : DateTime.UtcNow;
         }
     }
 

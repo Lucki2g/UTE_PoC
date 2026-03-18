@@ -365,6 +365,13 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
                                         payload: { id, data: { withMutations: updated } },
                                     });
                                 }}
+                                onRemove={() => {
+                                    const updated = withMutations.filter((_, idx) => idx !== i);
+                                    dispatch({
+                                        type: "UPDATE_NODE",
+                                        payload: { id, data: { withMutations: updated } },
+                                    });
+                                }}
                             />
                         ))}
                     </div>

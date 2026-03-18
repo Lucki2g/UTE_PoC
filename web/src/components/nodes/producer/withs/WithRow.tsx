@@ -1,10 +1,12 @@
 import { useMemo } from "react";
 import {
+    Button,
     Input,
     Text,
     makeStyles,
     tokens,
 } from "@fluentui/react-components";
+import { DeleteRegular } from "@fluentui/react-icons";
 import type { DslWithMutation, DslValueExpression } from "../../../../models/index.ts";
 import type { ProducerNodeData } from "../../../../models/builder.ts";
 import type { EntityColumnInfo } from "../../../../services/entitySchemaService.ts";
@@ -30,6 +32,9 @@ const useStyles = makeStyles({
         minWidth: "60px",
         flex: 1,
     },
+    removeButton: {
+        flexShrink: 0,
+    },
 });
 
 interface WithRowProps {
@@ -38,6 +43,7 @@ interface WithRowProps {
     previousProducers: ProducerNodeData[];
     onPathChange: (path: string) => void;
     onValueChange: (value: DslValueExpression) => void;
+    onRemove: () => void;
 }
 
 function getValueCategory(col: EntityColumnInfo | undefined): "text" | "enum" | "entityref" {
@@ -68,6 +74,7 @@ export function WithRow({
     previousProducers,
     onPathChange,
     onValueChange,
+    onRemove,
 }: WithRowProps) {
     const styles = useStyles();
     const { columns } = useEntityColumns(entityName);
@@ -126,6 +133,14 @@ export function WithRow({
             />
             <Text size={100} className={styles.equals}>=</Text>
             {renderValueEditor()}
+            <Button
+                className={styles.removeButton}
+                appearance="subtle"
+                size="small"
+                icon={<DeleteRegular />}
+                onClick={onRemove}
+                title="Remove"
+            />
         </div>
     );
 }

@@ -6,17 +6,22 @@ namespace TestEngine.Services;
 public class DataProducerService : IDataProducerService
 {
     private readonly string _dataProducersPath;
+    private readonly string _sharedTestProjItemsPath;
     private readonly IFileManagerService _fileManager;
     private readonly IProducerDslCompilerService _producerDslCompiler;
+    private readonly ISharedProjectService _sharedProject;
 
     public DataProducerService(
         TestProjectPaths paths,
         IFileManagerService fileManager,
-        IProducerDslCompilerService producerDslCompiler)
+        IProducerDslCompilerService producerDslCompiler,
+        ISharedProjectService sharedProject)
     {
         _dataProducersPath = paths.DataProducersPath;
+        _sharedTestProjItemsPath = paths.SharedTestProjItemsPath;
         _fileManager = fileManager;
         _producerDslCompiler = producerDslCompiler;
+        _sharedProject = sharedProject;
     }
 
     public async Task<IEnumerable<ProducerMetadata>> GetAllProducersAsync()
@@ -82,6 +87,9 @@ public class DataProducerService : IDataProducerService
                 $"Generated code has syntax errors: {string.Join("; ", validation.Diagnostics.Select(d => d.Message))}");
 
         await _fileManager.WriteFileAsync(filePath, compileResult.CSharpCode);
+
+        var projItemsInclude = $"$(MSBuildThisFileDirectory)DataProducers\\{fileName}";
+        await _sharedProject.AddCompileItemAsync(_sharedTestProjItemsPath, projItemsInclude);
     }
 
     public async Task UpdateProducerAsync(string entityName, DslProducerDefinition dsl)

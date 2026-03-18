@@ -63,6 +63,7 @@ builder.Services.AddSingleton<ITestService, TestService>();
 builder.Services.AddSingleton<ITestRunnerService, TestRunnerService>();
 builder.Services.AddSingleton<IDslCompilerService, DslCompilerService>();
 builder.Services.AddSingleton<IProducerDslCompilerService, ProducerDslCompilerService>();
+builder.Services.AddSingleton<ISharedProjectService, SharedProjectService>();
 builder.Services.AddSingleton<IDataProducerService, DataProducerService>();
 builder.Services.AddSingleton<IDataExtensionsService, DataExtensionsService>();
 builder.Services.AddSingleton<IFileManagerService, FileManagerService>();

@@ -33,7 +33,9 @@
       "Bash(rm -f /d/repos/CoreQuality/web/src/services/copilotService.ts /d/repos/CoreQuality/web/src/contexts/CopilotContext.tsx /d/repos/CoreQuality/web/src/util/msalToken.ts /d/repos/CoreQuality/web/src/components/CopilotChat.tsx)",
       "Bash(dotnet remove:*)",
       "Bash(grep -r \"workflow\\\\|Workflow\\\\|automation\\\\|flow\" /d/repos/CoreQuality/api/Controllers/ --include=*.cs -l)",
-      "Bash(grep -r \"MapGet\\\\|MapPost\" /d/repos/CoreQuality/api/Controllers/ --include=*.cs)"
+      "Bash(grep -r \"MapGet\\\\|MapPost\" /d/repos/CoreQuality/api/Controllers/ --include=*.cs)",
+      "Bash(grep -rn \"\\\\.projitems\\\\|XDocument\\\\|<Compile Include\\\\|ItemGroup\" /d/repos/CoreQuality/api/Services/ --include=*.cs)",
+      "Bash(xargs grep:*)"
     ]
   }
 }

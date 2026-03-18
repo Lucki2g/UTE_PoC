@@ -102,6 +102,7 @@ export interface DslBinding {
     kind: string;
     producer: DslProducerCall;
     build: boolean;
+    materialize?: boolean;
     inactivate?: boolean;
     expose?: DslExpose;
 }

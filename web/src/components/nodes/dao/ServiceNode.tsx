@@ -109,6 +109,7 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
     const isRetrieve = nodeData.operation === "RetrieveList"
         || nodeData.operation === "RetrieveSingle";
     const isUpdate = nodeData.operation === "Update";
+    const isCreate = nodeData.operation === "Create";
 
     // Compute previous producer nodes (those that appear before this node in the edge chain)
     const previousProducers = useMemo(() => {
@@ -135,6 +136,12 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
             })
             .map((n) => n.data as ProducerNodeData);
     }, [id, state.nodes, state.edges]);
+
+    // Producers preceding this node that have materialize=true (for Create target)
+    const materializedProducers = useMemo(
+        () => previousProducers.filter((p) => p.materialize),
+        [previousProducers],
+    );
 
     // For Update With blocks: find the producer that matches targetBinding to get entity name
     const targetProducer = useMemo(() => {
@@ -276,7 +283,7 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
                     <>
                         <div className={styles.field}>
                             <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Target</Text>
-                            {isUpdate ? (
+                            {(isUpdate || isCreate) ? (
                                 <Dropdown
                                     size="small"
                                     value={nodeData.targetBinding ?? ""}
@@ -290,7 +297,7 @@ export function ServiceNode({ id, data, selected }: NodeProps<BuilderNode>) {
                                     }
                                     style={{ flex: 1 }}
                                 >
-                                    {previousProducers.map((p) => (
+                                    {(isCreate ? materializedProducers : previousProducers).map((p) => (
                                         <Option key={p.variableName} value={p.variableName}>{p.variableName}</Option>
                                     ))}
                                 </Dropdown>

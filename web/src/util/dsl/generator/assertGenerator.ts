@@ -42,8 +42,16 @@ export function generateAssertions(asserts: BuilderNode[]): DslAssertion[] {
     return asserts.map((node) => {
         const d       = node.data as AssertNodeData;
         const hasPath = d.targetPath && d.targetPath.length > 0;
-        const target: DslAssertionTarget = hasPath
-            ? { kind: "member", rootVar: d.targetVar ?? "result", path: d.targetPath! }
+
+        // When member is "First", encode firstColumn (and optional firstSubProp) into the path
+        const effectivePath = hasPath && d.targetPath![0] === "First" && d.firstColumn
+            ? d.firstSubProp
+                ? ["First", d.firstColumn, d.firstSubProp]
+                : ["First", d.firstColumn]
+            : d.targetPath;
+
+        const target: DslAssertionTarget = (effectivePath && effectivePath.length > 0)
+            ? { kind: "member", rootVar: d.targetVar ?? "result", path: effectivePath }
             : { kind: "var", name: d.targetVar ?? "result" };
 
         const assertion: DslAssertion = { kind: d.assertionKind, target };

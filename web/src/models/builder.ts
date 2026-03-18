@@ -9,6 +9,7 @@ export interface ProducerNodeData {
     entityName: string;
     variableName: string;
     build: boolean;
+    materialize: boolean;
     anonymous: boolean;
     inactivate: boolean;
     withMutations: DslWithMutation[];
@@ -38,6 +39,10 @@ export interface AssertNodeData {
     assertionKind: string;
     targetVar?: string;
     targetPath?: string[];
+    /** When the first element of targetPath is "First", this holds the column to filter by */
+    firstColumn?: string;
+    /** Sub-property of firstColumn when it is an EntityReference (e.g. "Id" or "Name") */
+    firstSubProp?: string;
     /** Full DSL value expression for the expected value (enum, ref, string, number…) */
     expectedDsl?: DslValueExpression;
     /** For "throw" assertions: the exception type (e.g. "InvalidPluginExecutionException") */

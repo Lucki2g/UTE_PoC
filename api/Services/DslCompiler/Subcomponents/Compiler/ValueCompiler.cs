@@ -157,8 +157,12 @@ internal sealed class ValueCompiler : DslSubcomponentBase
         if (retrievalEntityMap != null && retrievalEntityMap.TryGetValue(rootVar, out var entitySet))
             resolvedPath = target.Path.Select(p => ResolvePropertyName(entitySet, p));
 
-        return $"{rootVar}{accessor}{string.Join(".", resolvedPath)}";
+        var segments = resolvedPath.Select(p => IsLinqFunction(p) ? $"{p}()" : p);
+        return $"{rootVar}{accessor}{string.Join(".", segments)}";
     }
+
+    private static bool IsLinqFunction(string segment) =>
+        segment is "Count" or "First" or "FirstOrDefault" or "Single" or "SingleOrDefault" or "Last";
 
     private static string FormatNumber(double value)
     {

@@ -135,6 +135,7 @@ function createNodeFromDrop(
                 entityName: producer.entityName,
                 variableName: producer.entityName.toLowerCase(),
                 build: false,
+                materialize: false,
                 anonymous: false,
                 withMutations: [],
                 inactivate: false,

@@ -63,11 +63,15 @@ export function loadAssert(assert: DslAssert, startY: number): AssertLoaderResul
         const a      = assert.assertions[i];
         const nodeId = `assert_${i}_${Date.now()}`;
 
+        const rawPath = a.target.path ?? [];
+        const isFirst = rawPath[0] === "First";
         const assertData: AssertNodeData = {
             nodeType:      "assert",
             assertionKind: a.kind,
             targetVar:     a.target.name ?? a.target.rootVar,
-            targetPath:    a.target.path ?? [],
+            targetPath:    isFirst ? ["First"] : rawPath,
+            ...(isFirst && rawPath[1] ? { firstColumn: rawPath[1] } : {}),
+            ...(isFirst && rawPath[2] ? { firstSubProp: rawPath[2] } : {}),
             expectedDsl:   a.expected ?? undefined,
             ...(a.kind === "throw" ? {
                 exceptionType: a.exceptionType,

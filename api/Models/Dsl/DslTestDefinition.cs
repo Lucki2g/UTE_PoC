@@ -85,6 +85,9 @@ public class DslBinding
     [JsonPropertyName("build")]
     public bool Build { get; set; }
 
+    [JsonPropertyName("materialize")]
+    public bool Materialize { get; set; }
+
     [JsonPropertyName("inactivate")]
     public bool Inactivate { get; set; }
 

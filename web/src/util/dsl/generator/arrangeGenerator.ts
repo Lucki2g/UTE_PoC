@@ -40,6 +40,7 @@ export function generateArrange(producers: BuilderNode[]): DslBinding[] {
                 with:  d.withMutations,
             },
             build: d.build,
+            ...(d.materialize ? { materialize: true } : {}),
             ...(d.inactivate ? { inactivate: true } : {}),
         };
     });

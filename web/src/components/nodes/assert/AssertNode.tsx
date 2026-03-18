@@ -18,6 +18,7 @@ import {
 import { DeleteRegular, MoreHorizontalRegular } from "@fluentui/react-icons";
 import type { BuilderNode, AssertNodeData, ProducerNodeData, ServiceNodeData } from "../../../models/builder.ts";
 import type { DslValueExpression } from "../../../models/dsl.ts";
+import type { EntityColumnInfo } from "../../../services/entitySchemaService.ts";
 import { useBuilderContext } from "../../../contexts/BuilderContext.tsx";
 import { ColumnLookup } from "../../fields/ColumnLookup.tsx";
 import { useEntityColumns } from "../../../hooks/useEntityColumns.ts";
@@ -98,24 +99,68 @@ function MemberPicker({
     );
     const isEntityRef = columnInfo?.dataType.replace("?", "").trim() === "EntityReference";
 
+    // Resolve firstColumn's column info unconditionally (used only in the isList branch)
+    const firstColInfo = useMemo(
+        () => columns.find((c) => c.propertyName === nodeData.firstColumn),
+        [columns, nodeData.firstColumn],
+    );
+    const firstColIsEntityRef = firstColInfo?.dataType.replace("?", "").trim() === "EntityReference";
+
     const setPath = (col: string, sub?: string) => {
         const path: string[] = col ? (sub ? [col, sub] : [col]) : [];
         dispatch({ type: "UPDATE_NODE", payload: { id, data: { targetPath: path } } });
     };
 
     if (selectedVarInfo.isList) {
+        const memberValue = nodeData.targetPath?.[0] ?? "";
+        const isFirst = memberValue === "First";
+
         return (
-            <Combobox
-                size="small"
-                freeform
-                value={nodeData.targetPath?.[0] ?? ""}
-                selectedOptions={nodeData.targetPath?.[0] ? [nodeData.targetPath[0]] : []}
-                onOptionSelect={(_ev, d) => setPath(d.optionText ?? d.optionValue ?? "")}
-                onChange={(ev) => setPath(ev.target.value)}
-                style={{ flex: 1, minWidth: "80px" }}
-            >
-                <Option key="Count" value="Count">Count</Option>
-            </Combobox>
+            <>
+                <Combobox
+                    size="small"
+                    freeform
+                    value={memberValue}
+                    selectedOptions={memberValue ? [memberValue] : []}
+                    onOptionSelect={(_ev, d) => {
+                        const chosen = d.optionText ?? d.optionValue ?? "";
+                        if (chosen !== "First") {
+                            dispatch({ type: "UPDATE_NODE", payload: { id, data: { firstColumn: undefined, firstSubProp: undefined } } });
+                        }
+                        setPath(chosen);
+                    }}
+                    onChange={(ev) => setPath(ev.target.value)}
+                    style={{ flex: 1, minWidth: "80px" }}
+                >
+                    <Option key="Count" value="Count">Count</Option>
+                    <Option key="First" value="First">First</Option>
+                </Combobox>
+                {isFirst && selectedVarInfo.entityName && (
+                    <ColumnLookup
+                        entityName={selectedVarInfo.entityName}
+                        value={nodeData.firstColumn ?? ""}
+                        onChange={(col) =>
+                            dispatch({ type: "UPDATE_NODE", payload: { id, data: { firstColumn: col, firstSubProp: undefined, expectedDsl: undefined } } })
+                        }
+                    />
+                )}
+                {isFirst && firstColIsEntityRef && nodeData.firstColumn && (
+                    <Dropdown
+                        size="small"
+                        value={nodeData.firstSubProp ?? ""}
+                        selectedOptions={nodeData.firstSubProp ? [nodeData.firstSubProp] : []}
+                        onOptionSelect={(_ev, d) =>
+                            dispatch({ type: "UPDATE_NODE", payload: { id, data: { firstSubProp: d.optionValue ?? "", expectedDsl: undefined } } })
+                        }
+                        placeholder=".Id/.Name"
+                        style={{ minWidth: "90px" }}
+                    >
+                        {entityRefSubProperties.map((p) => (
+                            <Option key={p} value={p}>{`.${p}`}</Option>
+                        ))}
+                    </Dropdown>
+                )}
+            </>
         );
     }
 
@@ -174,37 +219,33 @@ function dslValueToString(v: DslValueExpression | undefined): string {
 
 /**
  * Renders the expected-value editor for an assertion.
- * - Enum column  → dropdown of enum members (same column as target)
- * - EntityRef sub-property (e.g. order.Id) → var Combobox + .Id/.Name sub Dropdown
+ * - Enum column  → dropdown of enum members
+ * - EntityRef column (or sub-prop already set) → var Combobox + .Id/.Name Dropdown
  * - Else → free Input
+ *
+ * columnInfo and isSubProp are resolved by the caller so this component works for
+ * both plain member paths and First()-based list paths.
  */
 function ExpectedValueEditor({
     id,
     nodeData,
-    selectedVarInfo,
+    columnInfo,
+    isSubProp,
 }: {
     id: string;
     nodeData: AssertNodeData;
-    selectedVarInfo: VarInfo | null;
+    columnInfo: EntityColumnInfo | undefined;
+    isSubProp: boolean;
 }) {
     const { state, dispatch } = useBuilderContext();
-    const { columns } = useEntityColumns(selectedVarInfo?.entityName ?? "");
 
-    // Resolve the column the assertion is targeting
-    const targetColumn = nodeData.targetPath?.[0] ?? "";
-    const columnInfo = useMemo(
-        () => columns.find((c) => c.logicalName === targetColumn),
-        [columns, targetColumn],
-    );
-
-    const isEnum     = (columnInfo?.enumMembers?.length ?? 0) > 0;
+    const isEnum      = (columnInfo?.enumMembers?.length ?? 0) > 0;
     const isEntityRef = columnInfo?.dataType.replace("?", "").trim() === "EntityReference";
-    const isSubProp  = (nodeData.targetPath?.length ?? 0) >= 2; // e.g. ape_orderid.Id
 
     const setExpected = (v: DslValueExpression) =>
         dispatch({ type: "UPDATE_NODE", payload: { id, data: { expectedDsl: v } } });
 
-    // Current value helpers
+    // Current value helpers.
     // The backend decompiler encodes enum values as DslRefValue { id: enumType, member: value }
     // so we accept both "enum" and "ref" when the column is an enum type.
     const currentEnum = nodeData.expectedDsl?.type === "enum"
@@ -212,7 +253,7 @@ function ExpectedValueEditor({
         : (nodeData.expectedDsl?.type === "ref" && isEnum)
             ? (nodeData.expectedDsl.ref.member ?? "")
             : "";
-    const currentRefId = nodeData.expectedDsl?.type === "ref" ? (nodeData.expectedDsl.ref.id ?? "") : "";
+    const currentRefId     = nodeData.expectedDsl?.type === "ref" ? (nodeData.expectedDsl.ref.id     ?? "") : "";
     const currentRefMember = nodeData.expectedDsl?.type === "ref" ? (nodeData.expectedDsl.ref.member ?? "") : "";
 
     // Collect all non-delegate variables as ref candidates
@@ -228,7 +269,7 @@ function ExpectedValueEditor({
         [state.nodes],
     );
 
-    // Enum: show the same enum members as the target column
+    // Enum → dropdown of members
     if (isEnum && columnInfo) {
         const enumType = columnInfo.dataType.replace("?", "").trim();
         return (
@@ -237,13 +278,8 @@ function ExpectedValueEditor({
                 freeform
                 value={currentEnum}
                 selectedOptions={currentEnum ? [currentEnum] : []}
-                onOptionSelect={(_ev, d) => {
-                    const member = d.optionValue ?? "";
-                    setExpected({ type: "enum", enumType, member });
-                }}
-                onChange={(ev) => {
-                    setExpected({ type: "enum", enumType, member: ev.target.value });
-                }}
+                onOptionSelect={(_ev, d) => setExpected({ type: "enum", enumType, member: d.optionValue ?? "" })}
+                onChange={(ev) => setExpected({ type: "enum", enumType, member: ev.target.value })}
                 style={{ flex: 1 }}
                 placeholder="Select value..."
             >
@@ -254,7 +290,7 @@ function ExpectedValueEditor({
         );
     }
 
-    // EntityRef sub-property (e.g. .Id / .Name): pick a variable + sub-property
+    // EntityRef (or a sub-prop is already chosen) → variable picker + .Id/.Name
     if (isEntityRef || isSubProp) {
         return (
             <>
@@ -302,7 +338,6 @@ function ExpectedValueEditor({
             value={dslValueToString(nodeData.expectedDsl)}
             placeholder="expected value"
             onChange={(_ev, d) => {
-                // Parse to best-fit type
                 const raw = d.value;
                 if (raw === "") { dispatch({ type: "UPDATE_NODE", payload: { id, data: { expectedDsl: undefined } } }); return; }
                 if (raw === "true" || raw === "false") { setExpected({ type: "boolean", value: raw === "true" }); return; }
@@ -329,11 +364,9 @@ export function AssertNode({ id, data, selected }: NodeProps<BuilderNode>) {
             if (d.nodeType === "producer" && !d.anonymous && d.variableName) {
                 infos.push({ name: d.variableName, entityName: d.entityName, isList: false });
             } else if (d.nodeType === "service" && (d.operation === "RetrieveList" || d.operation === "RetrieveSingle") && d.resultVar) {
-                // Derive entity name from entitySet by removing trailing "Set"
                 const entityName = d.entitySet?.replace(/Set$/i, "") ?? null;
                 infos.push({ name: d.resultVar, entityName, isList: d.operation === "RetrieveList" });
             } else if (d.nodeType === "service" && d.isDelegateAct && d.delegateVar) {
-                // Delegate act variable (e.g. "action") for throws assertions
                 infos.push({ name: d.delegateVar, entityName: null, isList: false });
             }
         }
@@ -344,6 +377,25 @@ export function AssertNode({ id, data, selected }: NodeProps<BuilderNode>) {
         () => varInfos.find((v) => v.name === nodeData.targetVar) ?? null,
         [varInfos, nodeData.targetVar],
     );
+
+    // Resolve column schema for the entity the target var points to
+    const { columns: targetColumns } = useEntityColumns(selectedVarInfo?.entityName ?? "");
+
+    // Determine the column info and sub-prop flag to pass to ExpectedValueEditor.
+    // For First()-based paths the relevant column is firstColumn; otherwise it's targetPath[0].
+    const isFirstPath = nodeData.targetPath?.[0] === "First";
+    const { expectedColumnInfo, expectedIsSubProp } = useMemo(() => {
+        if (isFirstPath) {
+            const col = targetColumns.find((c) => c.propertyName === nodeData.firstColumn);
+            // Sub-prop is relevant when the column is an EntityRef and one has been chosen
+            const subPropChosen = !!nodeData.firstSubProp;
+            return { expectedColumnInfo: col, expectedIsSubProp: subPropChosen };
+        }
+        const targetColName = nodeData.targetPath?.[0] ?? "";
+        const col = targetColumns.find((c) => c.logicalName === targetColName);
+        const subPropChosen = (nodeData.targetPath?.length ?? 0) >= 2;
+        return { expectedColumnInfo: col, expectedIsSubProp: subPropChosen };
+    }, [isFirstPath, targetColumns, nodeData.firstColumn, nodeData.firstSubProp, nodeData.targetPath]);
 
     const hasExpected = nodeData.assertionKind === "be" || nodeData.assertionKind === "containSingle";
     const isThrow = nodeData.assertionKind === "throw";
@@ -433,7 +485,12 @@ export function AssertNode({ id, data, selected }: NodeProps<BuilderNode>) {
             {hasExpected && (
                 <div className={styles.footer}>
                     <Text size={100} style={{ minWidth: "55px", color: tokens.colorNeutralForeground3 }}>Expected</Text>
-                    <ExpectedValueEditor id={id} nodeData={nodeData} selectedVarInfo={selectedVarInfo} />
+                    <ExpectedValueEditor
+                        id={id}
+                        nodeData={nodeData}
+                        columnInfo={expectedColumnInfo}
+                        isSubProp={expectedIsSubProp}
+                    />
                 </div>
             )}
 

@@ -68,9 +68,10 @@ internal sealed class AssertEmitter : DslSubcomponentBase
         var awaitPrefix = test.Async ? "await " : "";
         var asyncSuffix = test.Async ? "Async" : "";
 
-        var setName = retrieval.EntitySet.EndsWith("Set", StringComparison.Ordinal)
+        var rawSetName = retrieval.EntitySet.EndsWith("Set", StringComparison.Ordinal)
             ? retrieval.EntitySet
             : retrieval.EntitySet + "Set";
+        var setName = _values.ResolveSetPropertyName(rawSetName);
 
         if (retrieval.Where != null)
         {

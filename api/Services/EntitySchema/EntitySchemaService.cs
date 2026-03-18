@@ -11,6 +11,8 @@ public class EntitySchemaService : IEntitySchemaService
     private Dictionary<string, List<string>> _enumCache = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Maps C# class name → entity logical name (populated during parse).</summary>
     private Dictionary<string, string> _classNameToLogicalName = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Maps entity logical name → actual Xrm Set property name (e.g. "connection" → "ConnectionSet").</summary>
+    private Dictionary<string, string> _logicalNameToSetProperty = new(StringComparer.OrdinalIgnoreCase);
     private DateTime _parsedAt = DateTime.MinValue;
     private readonly object _parseLock = new();
 
@@ -32,14 +34,21 @@ public class EntitySchemaService : IEntitySchemaService
     public Task<List<string>> GetEntityNamesAsync()
     {
         EnsureParsed();
-        return Task.FromResult(_cache.Keys.OrderBy(k => k).ToList());
+        // Return the actual Xrm Set property names (e.g. "ConnectionSet") so consumers
+        // can use them verbatim in generated code. Fall back to "<logicalName>Set" for any
+        // entity that has columns but no matching Xrm Set property.
+        var setNames = _cache.Keys
+            .Select(k => _logicalNameToSetProperty.TryGetValue(k, out var setName) ? setName : k + "Set")
+            .OrderBy(n => n)
+            .ToList();
+        return Task.FromResult(setNames);
     }
 
     public Task<string?> ResolveEntityLogicalNameAsync(string entityIdentifier)
     {
         EnsureParsed();
 
-        // Strip "Set" suffix if present (e.g. "ape_orderSet" → "ape_order")
+        // Strip "Set" suffix if present (e.g. "ape_orderSet" / "ConnectionSet" → stripped name)
         var stripped = entityIdentifier.EndsWith("Set", StringComparison.OrdinalIgnoreCase)
             ? entityIdentifier[..^3]
             : entityIdentifier;
@@ -48,7 +57,7 @@ public class EntitySchemaService : IEntitySchemaService
         if (_cache.ContainsKey(stripped))
             return Task.FromResult<string?>(stripped);
 
-        // C# class name match (e.g. "Orderdelivery" → "ape_orderdelivery")
+        // C# class name match (e.g. "Connection" / "Orderdelivery" → "connection" / "ape_orderdelivery")
         if (_classNameToLogicalName.TryGetValue(stripped, out var logicalName))
             return Task.FromResult<string?>(logicalName);
 
@@ -87,6 +96,7 @@ public class EntitySchemaService : IEntitySchemaService
         var code = File.ReadAllText(filePath);
         var tree = CSharpSyntaxTree.ParseText(code);
         var root = tree.GetCompilationUnitRoot();
+        _logicalNameToSetProperty = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         // Parse all enum declarations first so we can attach members to columns
         foreach (var enumDecl in root.DescendantNodes().OfType<EnumDeclarationSyntax>())
@@ -177,6 +187,32 @@ public class EntitySchemaService : IEntitySchemaService
             }
 
             _cache[entityName] = columns;
+        }
+
+        // Parse the Xrm context class to map logical names → actual Set property names.
+        // The Xrm class has properties like: public IQueryable<Connection> ConnectionSet { ... }
+        // We match the generic type argument back to a known entity logical name.
+        foreach (var classDecl in root.DescendantNodes().OfType<ClassDeclarationSyntax>())
+        {
+            // Target the class that extends ExtendedOrganizationServiceContext (the Xrm class)
+            var baseTypes = classDecl.BaseList?.Types.Select(t => t.Type.ToString()) ?? [];
+            if (!baseTypes.Any(b => b.Contains("OrganizationServiceContext"))) continue;
+
+            foreach (var prop in classDecl.Members.OfType<PropertyDeclarationSyntax>())
+            {
+                var propName = prop.Identifier.Text;
+                if (!propName.EndsWith("Set", StringComparison.Ordinal)) continue;
+
+                // Extract the entity class name from IQueryable<EntityClass>
+                var entityClassName = GetSimpleTypeName(prop.Type);
+                if (entityClassName == null) continue;
+
+                // Resolve to logical name via the class→logical map
+                if (!classNameToEntityLogicalName.TryGetValue(entityClassName, out var logicalName)) continue;
+
+                _logicalNameToSetProperty[logicalName] = propName;
+            }
+            break; // Only one Xrm context class expected
         }
     }
 

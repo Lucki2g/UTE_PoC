@@ -78,7 +78,9 @@ internal sealed class ExpressionDecompiler : DslSubcomponentBase
         // Enum signal: right is PascalCase (member name) and left has no dots (simple identifier, not a chain).
         // Covers both PascalCase enum types (e.g. Account_CustomerTypeCode.Customer)
         // and lowercase logical-name-style enum types (e.g. ape_orderstatus.Delivered).
-        if (!left.Contains('.') && char.IsUpper(right[0]))
+        // Exclude well-known EntityReference sub-properties (Id, Name) which are binding refs, not enums.
+        if (!left.Contains('.') && char.IsUpper(right[0]) &&
+            right is not ("Id" or "Name" or "LogicalName" or "EntityLogicalName"))
             return new DslEnumValue { EnumType = left, Member = right };
 
         // Otherwise it's a binding member reference (e.g. order.Name, producer.Id)

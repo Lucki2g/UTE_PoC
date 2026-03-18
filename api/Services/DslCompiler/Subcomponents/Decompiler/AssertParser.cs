@@ -261,16 +261,43 @@ internal sealed class AssertParser : DslSubcomponentBase
     /// Extracts path segments from the expression that precedes .Should() inside a conditional access.
     /// e.g. for ?.ape_orderstatus.Should(), the input is the MemberBindingExpression (.ape_orderstatus).
     ///      for ?.ape_orderid.Id.Should(), the input is MemberAccess(.ape_orderid .Id => MemberBinding).
+    ///      for ?.First().Record1Id.Id.Should(), includes "First" from the invocation.
     /// </summary>
     private static List<string> ExtractConditionalPathFromShouldTarget(ExpressionSyntax expr)
     {
         var parts = new List<string>();
         var current = expr;
 
-        while (current is MemberAccessExpressionSyntax ma)
+        while (true)
         {
-            parts.Insert(0, ma.Name.Identifier.Text);
-            current = ma.Expression;
+            if (current is MemberAccessExpressionSyntax ma)
+            {
+                parts.Insert(0, ma.Name.Identifier.Text);
+                current = ma.Expression;
+            }
+            else if (current is InvocationExpressionSyntax inv && inv.ArgumentList.Arguments.Count == 0)
+            {
+                if (inv.Expression is MemberAccessExpressionSyntax invAccess)
+                {
+                    // Regular chain: .First() — record method name and continue
+                    parts.Insert(0, invAccess.Name.Identifier.Text);
+                    current = invAccess.Expression;
+                }
+                else if (inv.Expression is MemberBindingExpressionSyntax invBinding)
+                {
+                    // Start of conditional chain: ?.Count() — record method name, stop
+                    parts.Insert(0, invBinding.Name.Identifier.Text);
+                    break;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            else
+            {
+                break;
+            }
         }
 
         if (current is MemberBindingExpressionSyntax binding)
@@ -396,20 +423,46 @@ internal sealed class AssertParser : DslSubcomponentBase
     /// Walks the WhenNotNull portion of a ConditionalAccessExpression to collect path segments.
     /// Handles: ?.Name  (MemberBindingExpression)
     ///      and ?.Ref.Id  (MemberAccessExpression on MemberBindingExpression)
+    ///      and ?.First().Name.Id  (InvocationExpression in the chain)
     /// </summary>
     private static List<string> ExtractConditionalPath(ExpressionSyntax whenNotNull)
     {
         var parts = new List<string>();
-
-        // Walk MemberAccessExpressionSyntax chain first (e.g. ?.ape_orderid.Id)
         var current = whenNotNull;
-        while (current is MemberAccessExpressionSyntax ma)
+
+        while (true)
         {
-            parts.Insert(0, ma.Name.Identifier.Text);
-            current = ma.Expression;
+            if (current is MemberAccessExpressionSyntax ma)
+            {
+                parts.Insert(0, ma.Name.Identifier.Text);
+                current = ma.Expression;
+            }
+            else if (current is InvocationExpressionSyntax inv && inv.ArgumentList.Arguments.Count == 0)
+            {
+                if (inv.Expression is MemberAccessExpressionSyntax invAccess)
+                {
+                    // Regular chain: .First() — record method name and continue
+                    parts.Insert(0, invAccess.Name.Identifier.Text);
+                    current = invAccess.Expression;
+                }
+                else if (inv.Expression is MemberBindingExpressionSyntax invBinding)
+                {
+                    // Start of conditional chain: ?.Count() or ?.First() — record and stop
+                    parts.Insert(0, invBinding.Name.Identifier.Text);
+                    break;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            else
+            {
+                break;
+            }
         }
 
-        // The root of the chain should be a MemberBindingExpression (e.g. ?.ape_orderid)
+        // The root of the chain should be a MemberBindingExpression (e.g. ?.ape_orderstatus)
         if (current is MemberBindingExpressionSyntax binding)
             parts.Insert(0, binding.Name.Identifier.Text);
 

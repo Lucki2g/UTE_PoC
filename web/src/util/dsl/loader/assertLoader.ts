@@ -58,6 +58,13 @@ export function loadAssert(assert: DslAssert, startY: number): AssertLoaderResul
         yPos += NODE_SPACING;
     }
 
+    // Build set of list variable names from retrievals (for legacy path normalisation)
+    const listVars = new Set(
+        assert.retrievals
+            .filter((r) => r.kind === "retrieveList" || r.kind === "retrieveMultiple")
+            .map((r) => r.var),
+    );
+
     // Assertion nodes
     for (let i = 0; i < assert.assertions.length; i++) {
         const a      = assert.assertions[i];
@@ -65,13 +72,28 @@ export function loadAssert(assert: DslAssert, startY: number): AssertLoaderResul
 
         const rawPath = a.target.path ?? [];
         const isFirst = rawPath[0] === "First";
+
+        // Legacy normalisation: a member path on a list variable that doesn't start with
+        // "Count" or "First" was stored before the First-encoding feature existed.
+        // Treat it as a First() path so the UI can represent it correctly.
+        const targetRootVar = a.target.name ?? a.target.rootVar;
+        const isLegacyListMember =
+            a.target.kind === "member" &&
+            !!targetRootVar &&
+            listVars.has(targetRootVar) &&
+            rawPath.length > 0 &&
+            rawPath[0] !== "First" &&
+            rawPath[0] !== "Count";
+
         const assertData: AssertNodeData = {
             nodeType:      "assert",
             assertionKind: a.kind,
-            targetVar:     a.target.name ?? a.target.rootVar,
-            targetPath:    isFirst ? ["First"] : rawPath,
+            targetVar:     targetRootVar,
+            targetPath:    (isFirst || isLegacyListMember) ? ["First"] : rawPath,
             ...(isFirst && rawPath[1] ? { firstColumn: rawPath[1] } : {}),
             ...(isFirst && rawPath[2] ? { firstSubProp: rawPath[2] } : {}),
+            ...(isLegacyListMember && rawPath[0] ? { firstColumn: rawPath[0] } : {}),
+            ...(isLegacyListMember && rawPath[1] ? { firstSubProp: rawPath[1] } : {}),
             expectedDsl:   a.expected ?? undefined,
             ...(a.kind === "throw" ? {
                 exceptionType: a.exceptionType,

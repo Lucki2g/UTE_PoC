@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
     Combobox,
     Option,
@@ -39,9 +39,18 @@ interface ColumnLookupProps {
 
 export function ColumnLookup({ entityName, value, onChange, filterDataType }: ColumnLookupProps) {
     const { columns, loading } = useEntityColumns(entityName);
-    const [query, setQuery] = useState("");
+    // inputText drives what is shown in the combobox input. It is kept in sync with the
+    // committed `value` prop but diverges while the user is typing a search query.
+    const [inputText, setInputText] = useState(value);
     const styles = useStyles();
 
+    // When the committed value changes from outside, sync the displayed text.
+    useEffect(() => {
+        setInputText(value);
+    }, [value]);
+
+    // Only filter when the user is actively typing (inputText differs from committed value)
+    const isSearching = inputText !== value;
     const filtered = useMemo(() => {
         let base = columns;
         if (filterDataType) {
@@ -52,15 +61,15 @@ export function ColumnLookup({ entityName, value, onChange, filterDataType }: Co
                     c.targetEntity?.toLowerCase() === ft,
             );
         }
-        if (!query) return base;
-        const q = query.toLowerCase();
+        if (!isSearching || !inputText) return base;
+        const q = inputText.toLowerCase();
         return base.filter(
             (c) =>
                 c.logicalName.includes(q) ||
                 c.propertyName.toLowerCase().includes(q) ||
                 c.displayName?.toLowerCase().includes(q),
         );
-    }, [columns, query, filterDataType]);
+    }, [columns, inputText, isSearching, filterDataType]);
 
     if (loading) {
         return <Spinner size="tiny" />;
@@ -70,17 +79,24 @@ export function ColumnLookup({ entityName, value, onChange, filterDataType }: Co
         <Combobox
             size="small"
             freeform
-            value={value}
+            value={inputText}
             selectedOptions={value ? [value] : []}
             onOptionSelect={(_ev, data) => {
-                if (data.optionValue) {
+                if (data.optionValue && data.optionValue !== value) {
                     onChange(data.optionValue);
-                    setQuery("");
+                    setInputText(data.optionValue);
+                } else if (data.optionValue) {
+                    // Re-selection of already-committed value — just sync display text
+                    setInputText(data.optionValue);
                 }
             }}
             onChange={(ev) => {
-                setQuery(ev.target.value);
-                onChange(ev.target.value);
+                // Only update local search text — never propagate partial input to the store
+                setInputText(ev.target.value);
+            }}
+            onBlur={() => {
+                // Restore displayed text to the committed value if user didn't pick an option
+                setInputText(value);
             }}
             placeholder="Column..."
             className={styles.combobox}

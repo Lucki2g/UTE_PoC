@@ -117,24 +117,23 @@ function MemberPicker({
 
         return (
             <>
-                <Combobox
+                <Dropdown
                     size="small"
-                    freeform
                     value={memberValue}
                     selectedOptions={memberValue ? [memberValue] : []}
+                    placeholder="member"
                     onOptionSelect={(_ev, d) => {
-                        const chosen = d.optionText ?? d.optionValue ?? "";
+                        const chosen = d.optionValue ?? "";
                         if (chosen !== "First") {
                             dispatch({ type: "UPDATE_NODE", payload: { id, data: { firstColumn: undefined, firstSubProp: undefined } } });
                         }
                         setPath(chosen);
                     }}
-                    onChange={(ev) => setPath(ev.target.value)}
                     style={{ flex: 1, minWidth: "80px" }}
                 >
                     <Option key="Count" value="Count">Count</Option>
                     <Option key="First" value="First">First</Option>
-                </Combobox>
+                </Dropdown>
                 {isFirst && selectedVarInfo.entityName && (
                     <ColumnLookup
                         entityName={selectedVarInfo.entityName}
@@ -253,8 +252,14 @@ function ExpectedValueEditor({
         : (nodeData.expectedDsl?.type === "ref" && isEnum)
             ? (nodeData.expectedDsl.ref.member ?? "")
             : "";
-    const currentRefId     = nodeData.expectedDsl?.type === "ref" ? (nodeData.expectedDsl.ref.id     ?? "") : "";
-    const currentRefMember = nodeData.expectedDsl?.type === "ref" ? (nodeData.expectedDsl.ref.member ?? "") : "";
+    // Legacy: decompiler may have stored a binding ref as { type:"enum", enumType: varName, member: prop }
+    const isLegacyRefAsEnum = !isEnum && nodeData.expectedDsl?.type === "enum";
+    const currentRefId     = nodeData.expectedDsl?.type === "ref"
+        ? (nodeData.expectedDsl.ref.id ?? "")
+        : (isLegacyRefAsEnum ? (nodeData.expectedDsl!.enumType ?? "") : "");
+    const currentRefMember = nodeData.expectedDsl?.type === "ref"
+        ? (nodeData.expectedDsl.ref.member ?? "")
+        : (isLegacyRefAsEnum ? (nodeData.expectedDsl!.member ?? "") : "");
 
     // Collect all non-delegate variables as ref candidates
     const refVarOptions = useMemo(

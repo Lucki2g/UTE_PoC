@@ -57,6 +57,29 @@ internal sealed class ValueCompiler : DslSubcomponentBase
     /// <summary>Resolves a logical property name to its C# property name for the given entity set.</summary>
     public string ResolveEntityProperty(string entitySet, string identifier) => ResolvePropertyName(entitySet, identifier);
 
+    /// <summary>
+    /// Resolves an entity set identifier (e.g. "connectionSet") to the correctly-cased
+    /// Xrm Set property name (e.g. "ConnectionSet"). Falls back to appending "Set" if
+    /// no schema info is available or the entity cannot be resolved.
+    /// </summary>
+    public string ResolveSetPropertyName(string entitySetIdentifier)
+    {
+        if (_schema == null) return entitySetIdentifier;
+
+        // Strip trailing "Set" to get the entity identifier, resolve logical name, then
+        // ask the schema for the canonical set property name via GetEntityNamesAsync.
+        var logicalName = _schema.ResolveEntityLogicalNameAsync(entitySetIdentifier).GetAwaiter().GetResult();
+        if (logicalName == null) return entitySetIdentifier;
+
+        // GetEntityNamesAsync returns correctly-cased Set property names (e.g. "ConnectionSet")
+        var allSetNames = _schema.GetEntityNamesAsync().GetAwaiter().GetResult();
+        var match = allSetNames.FirstOrDefault(n =>
+            n.EndsWith("Set", StringComparison.Ordinal) &&
+            string.Equals(n[..^3], logicalName, StringComparison.OrdinalIgnoreCase));
+
+        return match ?? entitySetIdentifier;
+    }
+
     private string ResolvePropertyName(string entitySet, string identifier)
     {
         if (_schema == null) return identifier;

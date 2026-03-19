@@ -302,7 +302,9 @@ public class MetadataService : IMetadataService
                         continue;
                     }
 
-                    var safeFileName = SanitizeFileName(name) + ".json";
+                    var sanitized = SanitizeFileName(name);
+                    if (sanitized.Length > 48) sanitized = sanitized[..48].TrimEnd();
+                    var safeFileName = $"{sanitized}-{workflow.Id}.json";
                     var filePath = Path.Combine(outputPath, safeFileName);
 
                     string prettyJson;
@@ -369,6 +371,6 @@ public class MetadataService : IMetadataService
     private static string SanitizeFileName(string name)
     {
         var invalid = Path.GetInvalidFileNameChars();
-        return string.Concat(name.Select(c => invalid.Contains(c) ? '_' : c));
+        return string.Concat(name.Select(c => invalid.Contains(c) || c == ' ' ? '_' : c));
     }
 }
